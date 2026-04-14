@@ -1,5 +1,5 @@
-import { Plus, MessageSquare, Sparkles, Image, Video, FileText, Globe, ChevronLeft } from "lucide-react";
-import { ChatSession } from "@/types/chat";
+import { Plus, MessageSquare, Sparkles, Image, Video, FileText, Globe, ChevronLeft, Map } from "lucide-react";
+import { ChatSession, ChatMode } from "@/types/chat";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface ChatSidebarProps {
@@ -7,19 +7,25 @@ interface ChatSidebarProps {
   activeSessionId: string | null;
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
+  onSetMode: (mode: ChatMode) => void;
+  currentMode: ChatMode;
   isOpen: boolean;
   onToggle: () => void;
 }
 
+const modeButtons = [
+  { icon: Sparkles, label: "Transform Me", mode: "transform" as ChatMode },
+  { icon: Map, label: "Roadmap Generator", mode: "roadmap" as ChatMode },
+];
+
 const creationTools = [
-  { icon: Sparkles, label: "Transform Me", id: "transform" },
   { icon: Image, label: "Image Generator", id: "image" },
   { icon: Video, label: "Video Generator", id: "video" },
   { icon: FileText, label: "PPT Generator", id: "ppt" },
   { icon: Globe, label: "Website Generator", id: "website" },
 ];
 
-export function ChatSidebar({ sessions, activeSessionId, onSelectSession, onNewChat, isOpen, onToggle }: ChatSidebarProps) {
+export function ChatSidebar({ sessions, activeSessionId, onSelectSession, onNewChat, onSetMode, currentMode, isOpen, onToggle }: ChatSidebarProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -39,11 +45,29 @@ export function ChatSidebar({ sessions, activeSessionId, onSelectSession, onNewC
 
           <button
             onClick={onNewChat}
-            className="mx-4 mb-4 flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity glow"
+            className="mx-4 mb-2 flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity glow"
           >
             <Plus className="w-4 h-4" />
             New Chat
           </button>
+
+          {/* Mode buttons */}
+          <div className="mx-4 mb-4 space-y-1">
+            {modeButtons.map((btn) => (
+              <button
+                key={btn.mode}
+                onClick={() => onSetMode(btn.mode)}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  currentMode === btn.mode
+                    ? "bg-primary/20 text-primary border border-primary/30"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                }`}
+              >
+                <btn.icon className="w-4 h-4 shrink-0" />
+                <span>{btn.label}</span>
+              </button>
+            ))}
+          </div>
 
           <div className="flex-1 overflow-y-auto px-2 space-y-1">
             <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Chats</p>
@@ -57,7 +81,13 @@ export function ChatSidebar({ sessions, activeSessionId, onSelectSession, onNewC
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50"
                 }`}
               >
-                <MessageSquare className="w-4 h-4 shrink-0" />
+                {session.mode === "transform" ? (
+                  <Sparkles className="w-4 h-4 shrink-0 text-primary" />
+                ) : session.mode === "roadmap" ? (
+                  <Map className="w-4 h-4 shrink-0 text-primary" />
+                ) : (
+                  <MessageSquare className="w-4 h-4 shrink-0" />
+                )}
                 <span className="truncate">{session.title}</span>
               </button>
             ))}

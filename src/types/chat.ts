@@ -1,6 +1,8 @@
+export type ChatMode = "chat" | "transform" | "roadmap";
+
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   timestamp: Date;
 }
@@ -10,4 +12,5 @@ export interface ChatSession {
   title: string;
   messages: ChatMessage[];
   createdAt: Date;
+  mode: ChatMode;
 }
