@@ -1,6 +1,9 @@
-import { Plus, MessageSquare, Sparkles, Image, Video, FileText, Globe, ChevronLeft, Map } from "lucide-react";
+import { Plus, MessageSquare, Sparkles, Image, Video, FileText, Globe, ChevronLeft, Map, LogOut, Trash2 } from "lucide-react";
 import { ChatSession, ChatMode } from "@/types/chat";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 interface ChatSidebarProps {
   sessions: ChatSession[];
@@ -8,6 +11,7 @@ interface ChatSidebarProps {
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
   onSetMode: (mode: ChatMode) => void;
+  onDeleteSession: (id: string) => void;
   currentMode: ChatMode;
   isOpen: boolean;
   onToggle: () => void;
@@ -18,14 +22,27 @@ const modeButtons = [
   { icon: Map, label: "Roadmap Generator", mode: "roadmap" as ChatMode },
 ];
 
-const creationTools = [
-  { icon: Image, label: "Image Generator", id: "image" },
-  { icon: Video, label: "Video Generator", id: "video" },
-  { icon: FileText, label: "PPT Generator", id: "ppt" },
-  { icon: Globe, label: "Website Generator", id: "website" },
-];
+export function ChatSidebar({
+  sessions,
+  activeSessionId,
+  onSelectSession,
+  onNewChat,
+  onSetMode,
+  onDeleteSession,
+  currentMode,
+  isOpen,
+  onToggle,
+}: ChatSidebarProps) {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
 
-export function ChatSidebar({ sessions, activeSessionId, onSelectSession, onNewChat, onSetMode, currentMode, isOpen, onToggle }: ChatSidebarProps) {
+  const creationTools = [
+    { icon: Image, label: "Image Generator", onClick: () => navigate("/images"), enabled: true },
+    { icon: Video, label: "Video Generator", onClick: () => toast("Coming soon"), enabled: false },
+    { icon: FileText, label: "PPT Generator", onClick: () => toast("Coming soon"), enabled: false },
+    { icon: Globe, label: "Website Generator", onClick: () => toast("Coming soon"), enabled: false },
+  ];
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -51,7 +68,6 @@ export function ChatSidebar({ sessions, activeSessionId, onSelectSession, onNewC
             New Chat
           </button>
 
-          {/* Mode buttons */}
           <div className="mx-4 mb-4 space-y-1">
             {modeButtons.map((btn) => (
               <button
@@ -71,25 +87,39 @@ export function ChatSidebar({ sessions, activeSessionId, onSelectSession, onNewC
 
           <div className="flex-1 overflow-y-auto px-2 space-y-1">
             <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Chats</p>
+            {sessions.length === 0 && (
+              <p className="px-3 py-2 text-xs text-muted-foreground italic">No chats yet</p>
+            )}
             {sessions.map((session) => (
-              <button
-                key={session.id}
-                onClick={() => onSelectSession(session.id)}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors truncate ${
-                  activeSessionId === session.id
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                }`}
-              >
-                {session.mode === "transform" ? (
-                  <Sparkles className="w-4 h-4 shrink-0 text-primary" />
-                ) : session.mode === "roadmap" ? (
-                  <Map className="w-4 h-4 shrink-0 text-primary" />
-                ) : (
-                  <MessageSquare className="w-4 h-4 shrink-0" />
-                )}
-                <span className="truncate">{session.title}</span>
-              </button>
+              <div key={session.id} className="group relative">
+                <button
+                  onClick={() => onSelectSession(session.id)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 pr-8 rounded-lg text-sm text-left transition-colors truncate ${
+                    activeSessionId === session.id
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                  }`}
+                >
+                  {session.mode === "transform" ? (
+                    <Sparkles className="w-4 h-4 shrink-0 text-primary" />
+                  ) : session.mode === "roadmap" ? (
+                    <Map className="w-4 h-4 shrink-0 text-primary" />
+                  ) : (
+                    <MessageSquare className="w-4 h-4 shrink-0" />
+                  )}
+                  <span className="truncate">{session.title}</span>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm("Delete this chat?")) onDeleteSession(session.id);
+                  }}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-all"
+                  aria-label="Delete chat"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
 
@@ -97,14 +127,34 @@ export function ChatSidebar({ sessions, activeSessionId, onSelectSession, onNewC
             <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Create</p>
             {creationTools.map((tool) => (
               <button
-                key={tool.id}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+                key={tool.label}
+                onClick={tool.onClick}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors ${
+                  !tool.enabled ? "opacity-50" : ""
+                }`}
               >
                 <tool.icon className="w-4 h-4 shrink-0" />
                 <span>{tool.label}</span>
+                {!tool.enabled && <span className="ml-auto text-[10px] text-muted-foreground">soon</span>}
               </button>
             ))}
           </div>
+
+          {user && (
+            <div className="border-t border-sidebar-border p-3 flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary shrink-0">
+                {(user.email?.[0] || "U").toUpperCase()}
+              </div>
+              <span className="text-xs text-sidebar-foreground truncate flex-1">{user.email}</span>
+              <button
+                onClick={signOut}
+                className="p-1.5 rounded-md hover:bg-sidebar-accent transition-colors"
+                aria-label="Sign out"
+              >
+                <LogOut className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+          )}
         </motion.aside>
       )}
     </AnimatePresence>
