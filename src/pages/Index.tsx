@@ -1,21 +1,23 @@
-import { useState, useCallback, useRef } from "react";
-import { Menu } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { Menu, Loader2 } from "lucide-react";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ChatMessageBubble } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { EmptyChat } from "@/components/EmptyChat";
 import { ChatSession, ChatMessage, ChatMode } from "@/types/chat";
 import { streamChat } from "@/lib/streamChat";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
-const generateId = () => Math.random().toString(36).slice(2, 10);
-
 export default function Index() {
+  const { user } = useAuth();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [currentMode, setCurrentMode] = useState<ChatMode>("chat");
+  const [loadingSessions, setLoadingSessions] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -24,20 +26,64 @@ export default function Index() {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }, []);
 
-  const createSession = useCallback((firstMessage: string, mode: ChatMode): string => {
-    const id = generateId();
-    const prefix = mode === "transform" ? "🔄 " : mode === "roadmap" ? "🗺️ " : "";
-    const session: ChatSession = {
-      id,
-      title: prefix + (firstMessage.slice(0, 40) || "New Chat"),
-      messages: [],
-      createdAt: new Date(),
-      mode,
-    };
-    setSessions((prev) => [session, ...prev]);
-    setActiveSessionId(id);
-    return id;
-  }, []);
+  // Load sessions from DB
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      setLoadingSessions(true);
+      const { data: sess, error } = await supabase
+        .from("chat_sessions")
+        .select("*")
+        .order("updated_at", { ascending: false });
+      if (error) {
+        toast.error("Failed to load chats");
+        setLoadingSessions(false);
+        return;
+      }
+      const sessionList: ChatSession[] = (sess || []).map((s) => ({
+        id: s.id,
+        title: s.title,
+        mode: s.mode as ChatMode,
+        createdAt: new Date(s.created_at),
+        messages: [],
+      }));
+      setSessions(sessionList);
+      setLoadingSessions(false);
+    })();
+  }, [user]);
+
+  // Load messages for active session if not loaded
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const sess = sessions.find((s) => s.id === activeSessionId);
+    if (!sess || sess.messages.length > 0) return;
+    (async () => {
+      const { data: msgs, error } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .eq("session_id", activeSessionId)
+        .order("created_at", { ascending: true });
+      if (error) {
+        toast.error("Failed to load messages");
+        return;
+      }
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? {
+                ...s,
+                messages: (msgs || []).map((m) => ({
+                  id: m.id,
+                  role: m.role as "user" | "assistant",
+                  content: m.content,
+                  timestamp: new Date(m.created_at),
+                })),
+              }
+            : s
+        )
+      );
+    })();
+  }, [activeSessionId, sessions]);
 
   const handleSetMode = useCallback((mode: ChatMode) => {
     setCurrentMode(mode);
@@ -49,50 +95,107 @@ export default function Index() {
     setActiveSessionId(null);
   }, []);
 
+  const handleDeleteSession = useCallback(
+    async (id: string) => {
+      const { error } = await supabase.from("chat_sessions").delete().eq("id", id);
+      if (error) {
+        toast.error("Delete failed");
+        return;
+      }
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      if (activeSessionId === id) setActiveSessionId(null);
+      toast.success("Chat deleted");
+    },
+    [activeSessionId]
+  );
+
   const sendMessage = useCallback(
     async (content: string) => {
+      if (!user) return;
       const mode = activeSession?.mode || currentMode;
       let sessionId = activeSessionId;
+      let workingSession = activeSession;
+
+      // Create session in DB if needed
       if (!sessionId) {
-        sessionId = createSession(content, mode);
+        const prefix = mode === "transform" ? "🔄 " : mode === "roadmap" ? "🗺️ " : "";
+        const title = prefix + content.slice(0, 40);
+        const { data: created, error } = await supabase
+          .from("chat_sessions")
+          .insert({ user_id: user.id, title, mode })
+          .select()
+          .single();
+        if (error || !created) {
+          toast.error("Failed to create chat");
+          return;
+        }
+        sessionId = created.id;
+        workingSession = {
+          id: created.id,
+          title: created.title,
+          mode: created.mode as ChatMode,
+          createdAt: new Date(created.created_at),
+          messages: [],
+        };
+        setSessions((prev) => [workingSession!, ...prev]);
+        setActiveSessionId(sessionId);
       }
 
-      const userMsg: ChatMessage = { id: generateId(), role: "user", content, timestamp: new Date() };
+      // Insert user message
+      const { data: userMsgRow, error: userMsgErr } = await supabase
+        .from("chat_messages")
+        .insert({ session_id: sessionId, user_id: user.id, role: "user", content })
+        .select()
+        .single();
+      if (userMsgErr || !userMsgRow) {
+        toast.error("Failed to save message");
+        return;
+      }
+
+      const userMsg: ChatMessage = {
+        id: userMsgRow.id,
+        role: "user",
+        content,
+        timestamp: new Date(userMsgRow.created_at),
+      };
+
+      // Insert empty assistant placeholder
+      const { data: asstRow, error: asstErr } = await supabase
+        .from("chat_messages")
+        .insert({ session_id: sessionId, user_id: user.id, role: "assistant", content: "" })
+        .select()
+        .single();
+      if (asstErr || !asstRow) {
+        toast.error("Failed to start response");
+        return;
+      }
+
+      const assistantId = asstRow.id;
 
       setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id !== sessionId) return s;
-          return {
-            ...s,
-            title: s.messages.length === 0 ? (mode === "transform" ? "🔄 " : mode === "roadmap" ? "🗺️ " : "") + content.slice(0, 40) : s.title,
-            messages: [...s.messages, userMsg],
-          };
-        })
+        prev.map((s) =>
+          s.id === sessionId
+            ? {
+                ...s,
+                messages: [
+                  ...s.messages,
+                  userMsg,
+                  { id: assistantId, role: "assistant" as const, content: "", timestamp: new Date() },
+                ],
+              }
+            : s
+        )
       );
       scrollToBottom();
       setIsLoading(true);
 
-      // Build message history for AI
-      const currentSession = sessions.find((s) => s.id === sessionId);
+      // Build history from current state
       const history = [
-        ...(currentSession?.messages || []).map((m) => ({ role: m.role, content: m.content })),
+        ...((workingSession?.messages || []).map((m) => ({ role: m.role, content: m.content }))),
         { role: "user" as const, content },
       ];
 
-      const assistantId = generateId();
       let assistantContent = "";
-
-      // Create empty assistant message
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id !== sessionId) return s;
-          return {
-            ...s,
-            messages: [...s.messages, { id: assistantId, role: "assistant" as const, content: "", timestamp: new Date() }],
-          };
-        })
-      );
-
       await streamChat({
         messages: history,
         mode,
@@ -100,41 +203,48 @@ export default function Index() {
           assistantContent += chunk;
           const captured = assistantContent;
           setSessions((prev) =>
-            prev.map((s) => {
-              if (s.id !== sessionId) return s;
-              return {
-                ...s,
-                messages: s.messages.map((m) => (m.id === assistantId ? { ...m, content: captured } : m)),
-              };
-            })
+            prev.map((s) =>
+              s.id !== sessionId
+                ? s
+                : { ...s, messages: s.messages.map((m) => (m.id === assistantId ? { ...m, content: captured } : m)) }
+            )
           );
           scrollToBottom();
         },
-        onDone: () => {
+        onDone: async () => {
           setIsLoading(false);
           scrollToBottom();
+          // Persist final assistant content + bump session updated_at
+          if (assistantContent) {
+            await supabase.from("chat_messages").update({ content: assistantContent }).eq("id", assistantId);
+            await supabase.from("chat_sessions").update({ updated_at: new Date().toISOString() }).eq("id", sessionId);
+          }
         },
-        onError: (err) => {
+        onError: async (err) => {
           toast.error(err);
-          // Remove empty assistant message on error
+          setIsLoading(false);
+          // Remove empty assistant placeholder
+          await supabase.from("chat_messages").delete().eq("id", assistantId);
           setSessions((prev) =>
-            prev.map((s) => {
-              if (s.id !== sessionId) return s;
-              return { ...s, messages: s.messages.filter((m) => m.id !== assistantId) };
-            })
+            prev.map((s) =>
+              s.id !== sessionId ? s : { ...s, messages: s.messages.filter((m) => m.id !== assistantId) }
+            )
           );
         },
       });
     },
-    [activeSessionId, activeSession, currentMode, sessions, createSession, scrollToBottom]
+    [activeSessionId, activeSession, currentMode, user, scrollToBottom]
   );
 
-  const handleSelectSession = useCallback((id: string) => {
-    setActiveSessionId(id);
-    const session = sessions.find((s) => s.id === id);
-    if (session) setCurrentMode(session.mode);
-    if (window.innerWidth < 768) setSidebarOpen(false);
-  }, [sessions]);
+  const handleSelectSession = useCallback(
+    (id: string) => {
+      setActiveSessionId(id);
+      const session = sessions.find((s) => s.id === id);
+      if (session) setCurrentMode(session.mode);
+      if (window.innerWidth < 768) setSidebarOpen(false);
+    },
+    [sessions]
+  );
 
   const displayMode = activeSession?.mode || currentMode;
 
@@ -146,6 +256,7 @@ export default function Index() {
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
         onSetMode={handleSetMode}
+        onDeleteSession={handleDeleteSession}
         currentMode={displayMode}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(false)}
@@ -158,17 +269,29 @@ export default function Index() {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-12 flex items-center px-4 border-b border-border shrink-0">
           {!sidebarOpen && (
-            <button onClick={() => setSidebarOpen(true)} className="p-1.5 rounded-md hover:bg-secondary transition-colors mr-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-1.5 rounded-md hover:bg-secondary transition-colors mr-3"
+            >
               <Menu className="w-5 h-5 text-muted-foreground" />
             </button>
           )}
           <span className="text-sm text-muted-foreground font-medium truncate">
-            {activeSession?.title || (displayMode === "transform" ? "Transform Me" : displayMode === "roadmap" ? "Roadmap Generator" : "New conversation")}
+            {activeSession?.title ||
+              (displayMode === "transform"
+                ? "Transform Me"
+                : displayMode === "roadmap"
+                ? "Roadmap Generator"
+                : "New conversation")}
           </span>
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          {!activeSession || activeSession.messages.length === 0 ? (
+          {loadingSessions ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : !activeSession || activeSession.messages.length === 0 ? (
             <EmptyChat onSuggestionClick={sendMessage} mode={displayMode} />
           ) : (
             <div className="py-4">
