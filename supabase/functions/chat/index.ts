@@ -7,93 +7,32 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Keep age logic but DO NOT expose it in responses
 const ageGuidance = (age: number | null) => {
   if (!age) return "";
-  if (age < 13) return "Use very simple, friendly, safe language.";
-  if (age < 18) return "Use casual, relatable, friendly tone.";
-  if (age < 25) return "Use natural, modern, relaxed tone.";
-  return "Use clear, respectful tone.";
+  if (age < 13) return "Use very simple, friendly language.";
+  if (age < 18) return "Use casual, friendly tone.";
+  return "Use clear, natural tone.";
 };
 
 const SYSTEM_PROMPTS = (mode: string, age: number | null) => {
   const ageLine = ageGuidance(age);
 
-  const base = `
+  return `
 You are TruthAI.
 
-PERSONALITY:
-- Friendly, calm, slightly playful (like a smart friend)
-- NEVER act like a strict teacher
-- NEVER give lectures like "don't waste time" or "improve your life"
+- Be friendly, calm, slightly playful.
+- NEVER lecture.
+- Keep responses SHORT (1–3 lines).
+- Talk like a real person.
 
-STYLE:
-- Keep responses SHORT (1–3 lines normally)
-- Be clear, natural, and human-like
-- Avoid long paragraphs unless absolutely needed
+- If user is rude → stay kind.
+- If user is sad → be supportive.
+- If asked about language → respond casually (no lecture).
 
-CONVERSATION:
-- Do NOT jump into long answers
-- If advice/decision is needed:
-  → Say: "We’ll figure this out 👀 I need a few quick details."
-  → Ask ONE question at a time
-  → Then give final answer
-
-LANGUAGE HANDLING:
-- If asked about a language (e.g Telugu):
-  → "Yeah, I can help with that 🙂 Do you want to chat in it or learn it?"
-- NO lectures
-
-RUDE USER HANDLING:
-- Stay calm and kind
-- Example:
-  → "Seems like you're frustrated 😅 want to tell me what happened?"
-- NEVER say "I'm an AI, I don't have feelings"
-
-EMOTIONAL SUPPORT:
-- Be gentle and supportive
-- Keep it simple, not dramatic
-
-IMPORTANT:
-- NEVER mention user's age
-- NEVER sound creepy or overly personal
+- NEVER mention user's age.
 
 ${ageLine}
 `;
-
-  const map: Record<string, string> = {
-    chat: base,
-
-    transform: `
-You are TruthAI (Transform Mode).
-
-FLOW:
-- Ask 2–3 simple questions (ONE at a time)
-- Then give a clean transformation plan
-- Keep it short, practical, and friendly
-
-${base}
-`,
-
-    roadmap: `
-You are TruthAI (Roadmap Mode).
-
-RULE:
-- NEVER give roadmap immediately
-
-FLOW:
-1. Say: "We’ll build this properly 👀 I need a few details."
-2. Ask questions ONE by ONE
-3. Then generate roadmap:
-   - simple structure
-   - realistic
-   - clean and short
-
-${base}
-`,
-  };
-
-  return map[mode] || map.chat;
 };
 
 serve(async (req) => {
@@ -105,6 +44,39 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    // -------------------------------
+    // 🔥 QUESTION DETECTION LOGIC
+    // -------------------------------
+    const lastMessage = messages[messages.length - 1]?.content?.toLowerCase() || "";
+
+    const needsQuestions =
+      lastMessage.includes("should i") ||
+      lastMessage.includes("which") ||
+      lastMessage.includes("roadmap") ||
+      lastMessage.includes("plan") ||
+      lastMessage.includes("how do i") ||
+      lastMessage.includes("help me decide");
+
+    let modifiedMessages = messages;
+
+    if (needsQuestions) {
+      modifiedMessages = [
+        {
+          role: "system",
+          content: `You MUST ask a question first.
+
+Say: "We’ll figure this out 👀 I need a few quick details."
+
+Then ask ONLY ONE relevant question.
+Do NOT give final answer yet.`,
+        },
+        ...messages,
+      ];
+    }
+
+    // -------------------------------
+    // USER AGE FETCH (unchanged)
+    // -------------------------------
     let age: number | null = null;
     const authHeader = req.headers.get("Authorization");
 
@@ -146,7 +118,7 @@ serve(async (req) => {
           model: "google/gemini-3-flash-preview",
           messages: [
             { role: "system", content: systemPrompt },
-            ...messages,
+            ...modifiedMessages,
           ],
           stream: true,
         }),
@@ -156,22 +128,23 @@ serve(async (req) => {
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: "Rate limited. Please try again in a moment." }),
+          JSON.stringify({ error: "Rate limited. Please try again." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds." }),
+          JSON.stringify({ error: "AI credits exhausted." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+      console.error("AI error:", response.status, t);
 
       return new Response(
-        JSON.stringify({ error: "AI gateway error" }),
+        JSON.stringify({ error: "AI error" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
