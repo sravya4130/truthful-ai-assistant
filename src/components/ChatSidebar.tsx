@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { SidebarAuth } from "./SidebarAuth";
 
 interface ChatSidebarProps {
   sessions: ChatSession[];
@@ -37,9 +38,9 @@ export function ChatSidebar({
   const navigate = useNavigate();
 
   const creationTools = [
-    { icon: Image, label: "Image Generator", onClick: () => navigate("/images"), enabled: true },
+    { icon: Image, label: "Image Generator", onClick: () => user ? navigate("/images") : toast.error("Sign up to use this"), enabled: true },
+    { icon: FileText, label: "PPT Generator", onClick: () => user ? navigate("/ppt") : toast.error("Sign up to use this"), enabled: true },
     { icon: Video, label: "Video Generator", onClick: () => toast("Coming soon"), enabled: false },
-    { icon: FileText, label: "PPT Generator", onClick: () => toast("Coming soon"), enabled: false },
     { icon: Globe, label: "Website Generator", onClick: () => toast("Coming soon"), enabled: false },
   ];
 
