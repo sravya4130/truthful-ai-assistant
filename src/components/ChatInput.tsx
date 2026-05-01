@@ -8,14 +8,19 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
-export function ChatInput({ onSend, isLoading, placeholder = "Ask me anything â€” I'll be brutally honest..." }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  isLoading,
+  placeholder = "Hey ðŸ‘‹ what do you want help with?"
+}: ChatInputProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + "px";
+      textareaRef.current.style.height =
+        Math.min(textareaRef.current.scrollHeight, 160) + "px";
     }
   }, [input]);
 
@@ -46,8 +51,9 @@ export function ChatInput({ onSend, isLoading, placeholder = "Ask me anything â€
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={1}
-          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none max-h-40 font-body"
+          className="flex-1 bg-transparent text-base text-foreground placeholder:text-muted-foreground resize-none outline-none max-h-40 font-body"
         />
+
         <button
           onClick={handleSubmit}
           disabled={!input.trim() || isLoading}
@@ -56,8 +62,9 @@ export function ChatInput({ onSend, isLoading, placeholder = "Ask me anything â€
           <Send className="w-4 h-4" />
         </button>
       </motion.div>
-      <p className="text-center text-xs text-muted-foreground mt-2">
-        Brutally honest. No sugarcoating. Always actionable.
+
+      <p className="text-center text-sm text-muted-foreground mt-2">
+        Friendly, honest, and here to help âœ¨
       </p>
     </div>
   );
