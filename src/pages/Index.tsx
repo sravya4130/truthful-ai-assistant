@@ -254,6 +254,7 @@ export default function Index() {
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ background: "var(--gradient-surface)" }}>
+      <OnboardingModal />
       <ChatSidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
