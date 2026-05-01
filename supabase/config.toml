@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.generate-image]
 verify_jwt = false
+
+[functions.edit-image]
+verify_jwt = false
+
+[functions.generate-ppt-content]
+verify_jwt = false
