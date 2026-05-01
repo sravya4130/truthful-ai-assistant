@@ -13,20 +13,17 @@ serve(async (req) => {
   try {
     const { messages } = await req.json();
 
-    // 🔥 KEEP ONLY USER MESSAGES (remove old AI personality)
-    const cleanMessages = messages.filter((m: any) => m.role === "user");
+    // 🔥 TAKE ONLY LAST 5 MESSAGES (keeps context but avoids old personality)
+    const recentMessages = messages.slice(-5);
 
     const lastMessage =
-      cleanMessages[cleanMessages.length - 1]?.content?.toLowerCase() || "";
+      recentMessages[recentMessages.length - 1]?.content?.toLowerCase() || "";
 
-    // 🔥 FORCE QUESTION FLOW
+    // 🔥 STRONG DECISION DETECTION
     const isDecision =
-      lastMessage.includes("should i") ||
-      lastMessage.includes("which") ||
-      lastMessage.includes("roadmap") ||
-      lastMessage.includes("plan") ||
-      lastMessage.includes("how do i");
+      /(should i|which|roadmap|plan|how do i|help me decide)/i.test(lastMessage);
 
+    // 🔥 HARD OVERRIDE (NO AI)
     if (isDecision) {
       return new Response(
         JSON.stringify({
@@ -41,9 +38,9 @@ serve(async (req) => {
       );
     }
 
-    // 🔥 AI CALL
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
+    // 🔥 AI CALL
     const aiResponse = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
@@ -54,43 +51,41 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           model: "google/gemini-3-flash-preview",
-          max_tokens: 100,
-          temperature: 0.6,
+          max_tokens: 80,
+          temperature: 0.5,
           messages: [
             {
               role: "system",
               content: `
-You are a friendly, chill AI.
+You are a friendly AI.
 
-STRICT RULES:
-- Keep replies SHORT (1–2 lines only)
-- NO lectures
-- NO "stop wasting time"
-- NO "go fix your life"
-- NO long explanations
+RULES:
+- Max 2 lines ONLY
+- No long text
+- No advice paragraphs
+- No "stop wasting time"
+- No lecture tone
 - Talk like a normal friend
 
-If user is rude:
-→ Stay calm and kind
+If user is rude → stay calm
+If sad → be supportive
 
-If user is sad:
-→ Be supportive, simple
-
-If user asks about language:
-→ Be friendly, no lecture
-
-Break rules = wrong answer
+Break rules = wrong
 `,
             },
-            ...cleanMessages,
+            ...recentMessages,
           ],
         }),
       }
     );
 
     const data = await aiResponse.json();
-    const reply =
+
+    let reply =
       data?.choices?.[0]?.message?.content || "Something went wrong";
+
+    // 🔥 HARD TRIM (extra safety)
+    reply = reply.split("\n").slice(0, 2).join("\n");
 
     return new Response(
       JSON.stringify({ response: reply }),
