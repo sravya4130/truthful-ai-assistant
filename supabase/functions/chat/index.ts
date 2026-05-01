@@ -13,98 +13,105 @@ serve(async (req) => {
   try {
     const { messages } = await req.json();
 
-    // 🔥 TAKE ONLY LAST 5 MESSAGES (keeps context but avoids old personality)
-    const recentMessages = messages.slice(-5);
-
     const lastMessage =
-      recentMessages[recentMessages.length - 1]?.content?.toLowerCase() || "";
+      messages[messages.length - 1]?.content?.toLowerCase() || "";
 
-    // 🔥 STRONG DECISION DETECTION
-    const isDecision =
-      /(should i|which|roadmap|plan|how do i|help me decide)/i.test(lastMessage);
+    // -------------------------------
+    // MEMORY
+    // -------------------------------
+    if (!globalThis.flow) globalThis.flow = {};
+    const userId = "user";
 
-    // 🔥 HARD OVERRIDE (NO AI)
-    if (isDecision) {
-      return new Response(
-        JSON.stringify({
-          response: "We’ll figure this out 👀\nWhat kind of event is it?",
-        }),
-        {
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+    if (!globalThis.flow[userId]) {
+      globalThis.flow[userId] = { step: 0, data: {} };
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const flow = globalThis.flow[userId];
 
-    // 🔥 AI CALL
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          max_tokens: 80,
-          temperature: 0.5,
-          messages: [
-            {
-              role: "system",
-              content: `
-You are a friendly AI.
+    // -------------------------------
+    // TRIGGER DECISION FLOW
+    // -------------------------------
+    const isDecision =
+      lastMessage.includes("should i") ||
+      lastMessage.includes("which");
 
-RULES:
-- Max 2 lines ONLY
-- No long text
-- No advice paragraphs
-- No "stop wasting time"
-- No lecture tone
-- Talk like a normal friend
+    if (isDecision || flow.step > 0) {
 
-If user is rude → stay calm
-If sad → be supportive
-
-Break rules = wrong
-`,
-            },
-            ...recentMessages,
-          ],
-        }),
+      if (flow.step === 0) {
+        flow.step = 1;
+        return new Response(
+          JSON.stringify({
+            response: "What are you wearing?",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-    );
 
-    const data = await aiResponse.json();
+      if (flow.step === 1) {
+        flow.data.outfit = lastMessage;
+        flow.step = 2;
 
-    let reply =
-      data?.choices?.[0]?.message?.content || "Something went wrong";
+        return new Response(
+          JSON.stringify({
+            response: "Where are you going?",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-    // 🔥 HARD TRIM (extra safety)
-    reply = reply.split("\n").slice(0, 2).join("\n");
+      if (flow.step === 2) {
+        flow.data.place = lastMessage;
+        flow.step = 3;
 
+        return new Response(
+          JSON.stringify({
+            response: "What vibe do you want? (bold / chill)",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (flow.step === 3) {
+        flow.data.vibe = lastMessage;
+
+        let result = "black 🖤";
+
+        if (
+          flow.data.vibe.includes("bold") ||
+          flow.data.place.includes("party")
+        ) {
+          result = "red ❤️";
+        }
+
+        flow.step = 0;
+
+        return new Response(
+          JSON.stringify({
+            response: result,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // -------------------------------
+    // NO AI → CLEAN SHORT CHAT ONLY
+    // -------------------------------
     return new Response(
-      JSON.stringify({ response: reply }),
+      JSON.stringify({
+        response: "Tell me what you need 👀",
+      }),
       {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
+
   } catch (err) {
     return new Response(
       JSON.stringify({ error: "Server error" }),
       {
         status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   }
