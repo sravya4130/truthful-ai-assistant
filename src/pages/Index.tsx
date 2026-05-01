@@ -4,6 +4,7 @@ import { ChatSidebar } from "@/components/ChatSidebar";
 import { ChatMessageBubble } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { EmptyChat } from "@/components/EmptyChat";
+import { OnboardingModal } from "@/components/OnboardingModal";
 import { ChatSession, ChatMessage, ChatMode } from "@/types/chat";
 import { streamChat } from "@/lib/streamChat";
 import { supabase } from "@/integrations/supabase/client";
@@ -111,7 +112,10 @@ export default function Index() {
 
   const sendMessage = useCallback(
     async (content: string) => {
-      if (!user) return;
+      if (!user) {
+        toast.error("Please sign up in the sidebar to start chatting");
+        return;
+      }
       const mode = activeSession?.mode || currentMode;
       let sessionId = activeSessionId;
       let workingSession = activeSession;
