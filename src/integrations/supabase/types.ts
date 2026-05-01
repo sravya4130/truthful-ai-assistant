@@ -108,6 +108,7 @@ export type Database = {
           display_name: string | null
           goals: string | null
           id: string
+          onboarded: boolean
           updated_at: string
           user_id: string
         }
@@ -118,6 +119,7 @@ export type Database = {
           display_name?: string | null
           goals?: string | null
           id?: string
+          onboarded?: boolean
           updated_at?: string
           user_id: string
         }
@@ -128,6 +130,7 @@ export type Database = {
           display_name?: string | null
           goals?: string | null
           id?: string
+          onboarded?: boolean
           updated_at?: string
           user_id?: string
         }
