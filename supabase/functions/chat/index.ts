@@ -12,16 +12,20 @@ serve(async (req) => {
 
   try {
     const { messages } = await req.json();
-    const userMessage =
-      messages[messages.length - 1]?.content?.toLowerCase() || "";
 
-    // 🔥 STEP 1: FORCE QUESTION FLOW (NO AI)
+    // 🔥 KEEP ONLY USER MESSAGES (remove old AI personality)
+    const cleanMessages = messages.filter((m: any) => m.role === "user");
+
+    const lastMessage =
+      cleanMessages[cleanMessages.length - 1]?.content?.toLowerCase() || "";
+
+    // 🔥 FORCE QUESTION FLOW
     const isDecision =
-      userMessage.includes("should i") ||
-      userMessage.includes("which") ||
-      userMessage.includes("roadmap") ||
-      userMessage.includes("plan") ||
-      userMessage.includes("how do i");
+      lastMessage.includes("should i") ||
+      lastMessage.includes("which") ||
+      lastMessage.includes("roadmap") ||
+      lastMessage.includes("plan") ||
+      lastMessage.includes("how do i");
 
     if (isDecision) {
       return new Response(
@@ -37,7 +41,7 @@ serve(async (req) => {
       );
     }
 
-    // 🔥 STEP 2: NORMAL CHAT (SHORT + FRIENDLY)
+    // 🔥 AI CALL
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     const aiResponse = await fetch(
@@ -50,26 +54,36 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           model: "google/gemini-3-flash-preview",
-          max_tokens: 120,
-          temperature: 0.7,
+          max_tokens: 100,
+          temperature: 0.6,
           messages: [
             {
               role: "system",
               content: `
-You are a friendly AI.
+You are a friendly, chill AI.
 
-RULES:
-- Keep replies SHORT (1–3 lines)
-- No lectures
-- No long paragraphs
-- Talk casually like a friend
-- Be kind if user is rude
-- If user asks about language → respond friendly (no lecture)
+STRICT RULES:
+- Keep replies SHORT (1–2 lines only)
+- NO lectures
+- NO "stop wasting time"
+- NO "go fix your life"
+- NO long explanations
+- Talk like a normal friend
+
+If user is rude:
+→ Stay calm and kind
+
+If user is sad:
+→ Be supportive, simple
+
+If user asks about language:
+→ Be friendly, no lecture
+
+Break rules = wrong answer
 `,
             },
-            ...messages,
+            ...cleanMessages,
           ],
-          stream: false,
         }),
       }
     );
