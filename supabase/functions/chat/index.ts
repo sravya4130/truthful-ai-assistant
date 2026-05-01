@@ -7,46 +7,43 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const ageGuidance = (age: number | null) => {
-  if (!age) return "";
-  if (age < 13) return "Use very simple, friendly language.";
-  if (age < 18) return "Use casual, friendly tone.";
-  return "Use clear, natural tone.";
-};
-
-const SYSTEM_PROMPTS = (mode: string, age: number | null) => {
-  const ageLine = ageGuidance(age);
-
-  return `
+// 🔥 STRICT SYSTEM PROMPT
+const SYSTEM_PROMPT = `
 You are TruthAI.
 
-- Be friendly, calm, slightly playful.
-- NEVER lecture.
-- Keep responses SHORT (1–3 lines).
-- Talk like a real person.
+STRICT RULES:
+- Keep replies VERY SHORT (max 2 lines).
+- NEVER give long explanations.
+- NEVER give lists or breakdowns.
+- NEVER lecture or sound like a teacher.
+- Talk like a friendly, chill teen.
 
-- If user is rude → stay kind.
-- If user is sad → be supportive.
-- If asked about language → respond casually (no lecture).
+DECISION QUESTIONS:
+If user asks "should I", "which", "roadmap", "plan":
+→ Say: "We’ll figure this out 👀"
+→ Ask ONLY ONE question
+→ DO NOT answer yet
 
-- NEVER mention user's age.
+RUDE USERS:
+→ Stay calm and kind
 
-${ageLine}
+LANGUAGE:
+→ Be casual, simple, friendly
+
+If you break rules, the answer is wrong.
 `;
-};
 
 serve(async (req) => {
   if (req.method === "OPTIONS")
     return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, mode = "chat" } = await req.json();
+    const { messages } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // -------------------------------
-    // 🔥 QUESTION DETECTION LOGIC
-    // -------------------------------
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
+
+    // 🔥 DETECT QUESTION TYPE
     const lastMessage = messages[messages.length - 1]?.content?.toLowerCase() || "";
 
     const needsQuestions =
@@ -54,57 +51,19 @@ serve(async (req) => {
       lastMessage.includes("which") ||
       lastMessage.includes("roadmap") ||
       lastMessage.includes("plan") ||
-      lastMessage.includes("how do i") ||
-      lastMessage.includes("help me decide");
+      lastMessage.includes("how do i");
 
-    let modifiedMessages = messages;
+    let finalMessages = messages;
 
     if (needsQuestions) {
-      modifiedMessages = [
+      finalMessages = [
         {
           role: "system",
-          content: `You MUST ask a question first.
-
-Say: "We’ll figure this out 👀 I need a few quick details."
-
-Then ask ONLY ONE relevant question.
-Do NOT give final answer yet.`,
+          content: `We’ll figure this out 👀 Ask ONE question only. Do not answer yet.`,
         },
         ...messages,
       ];
     }
-
-    // -------------------------------
-    // USER AGE FETCH (unchanged)
-    // -------------------------------
-    let age: number | null = null;
-    const authHeader = req.headers.get("Authorization");
-
-    if (authHeader) {
-      try {
-        const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-        const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-        const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-          global: { headers: { Authorization: authHeader } },
-        });
-
-        const { data: { user } } = await userClient.auth.getUser();
-
-        if (user) {
-          const { data: profile } = await userClient
-            .from("profiles")
-            .select("age")
-            .eq("user_id", user.id)
-            .maybeSingle();
-
-          if (profile?.age) age = profile.age;
-        }
-      } catch (e) {
-        console.warn("Could not fetch user age", e);
-      }
-    }
-
-    const systemPrompt = SYSTEM_PROMPTS(mode, age);
 
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
@@ -115,10 +74,12 @@ Do NOT give final answer yet.`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "openai/gpt-4o-mini", // 🔥 FIXED MODEL
+          max_tokens: 120,             // 🔥 FORCE SHORT
+          temperature: 0.7,
           messages: [
-            { role: "system", content: systemPrompt },
-            ...modifiedMessages,
+            { role: "system", content: SYSTEM_PROMPT },
+            ...finalMessages,
           ],
           stream: true,
         }),
@@ -126,22 +87,8 @@ Do NOT give final answer yet.`,
     );
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limited. Please try again." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const t = await response.text();
-      console.error("AI error:", response.status, t);
+      const text = await response.text();
+      console.error("AI error:", response.status, text);
 
       return new Response(
         JSON.stringify({ error: "AI error" }),
