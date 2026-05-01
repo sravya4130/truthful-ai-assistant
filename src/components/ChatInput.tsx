@@ -16,6 +16,7 @@ export function ChatInput({
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // ✅ Auto resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -24,13 +25,27 @@ export function ChatInput({
     }
   }, [input]);
 
+  // ✅ Auto focus on load
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
   const handleSubmit = () => {
-    if (!input.trim() || isLoading) return;
-    onSend(input.trim());
+    const trimmed = input.trim();
+
+    if (!trimmed || isLoading) return;
+
+    onSend(trimmed);
     setInput("");
+
+    // reset height after sending
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // ✅ Enter = send, Shift+Enter = new line
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -51,7 +66,8 @@ export function ChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={1}
-          className="flex-1 bg-transparent text-base text-foreground placeholder:text-muted-foreground resize-none outline-none max-h-40 font-body"
+          disabled={isLoading} // ✅ prevents typing while loading
+          className="flex-1 bg-transparent text-base text-foreground placeholder:text-muted-foreground resize-none outline-none max-h-40 font-body disabled:opacity-60"
         />
 
         <button
