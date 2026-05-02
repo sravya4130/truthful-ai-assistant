@@ -53,7 +53,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="max-w-3xl mx-auto w-full px-4 pb-4">
+    <div className="max-w-3xl mx-auto w-full px-4 pb-2 pt-2 sticky bottom-0 bg-transparent">
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
