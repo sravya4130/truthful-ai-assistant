@@ -1,6 +1,7 @@
 import { ChatMessage as ChatMessageType } from "@/types/chat";
 import { motion } from "framer-motion";
 import { Bot, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -11,40 +12,30 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
-      className={`flex gap-3 max-w-3xl mx-auto px-4 py-3 ${
-        isAssistant ? "" : "flex-row-reverse"
-      }`}
+      transition={{ duration: 0.3 }}
+      className={`flex gap-3 max-w-3xl mx-auto px-4 py-4 ${isAssistant ? "" : "flex-row-reverse"}`}
     >
-      {/* Avatar */}
       <div
         className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
-          isAssistant
-            ? "bg-primary/20 text-primary"
-            : "bg-secondary text-secondary-foreground"
+          isAssistant ? "bg-primary/20 text-primary" : "bg-secondary text-secondary-foreground"
         }`}
       >
-        {isAssistant ? (
-          <Bot className="w-4 h-4" />
-        ) : (
-          <User className="w-4 h-4" />
-        )}
+        {isAssistant ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
       </div>
 
-      {/* Message */}
       <div
-        className={`flex-1 text-sm leading-snug ${
-          isAssistant ? "text-foreground" : "text-foreground"
+        className={`flex-1 text-sm leading-relaxed ${
+          isAssistant ? "text-foreground" : "text-foreground/90"
         }`}
       >
         {isAssistant ? (
-          <div className="max-w-[75%] whitespace-pre-wrap rounded-xl px-4 py-2 bg-muted/40">
-            {message.content}
+          <div className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-headings:font-heading">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
         ) : (
-          <div className="max-w-[75%] bg-secondary rounded-xl px-4 py-2 inline-block">
+          <div className="bg-secondary rounded-xl px-4 py-3 inline-block">
             {message.content}
           </div>
         )}
