@@ -325,10 +325,10 @@ export default function Index() {
           isLoading={isLoading}
           placeholder={
             displayMode === "transform"
-              ? "Tell me who you want to become..."
+              ? "what do you wanna become?"
               : displayMode === "roadmap"
-              ? "What's your goal? I'll build your roadmap..."
-              : "Ask me anything — I'll be brutally honest..."
+              ? "what's the goal?"
+              : "type something..."
           }
         />
       </div>
