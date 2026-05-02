@@ -95,15 +95,26 @@ export function SidebarAuth() {
           onChange={(e) => setEmail(e.target.value)}
           className="h-9 text-xs"
         />
-        <Input
-          type="password"
-          required
-          minLength={6}
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="h-9 text-xs"
-        />
+        <div className="relative">
+          <Input
+            type={showPassword ? "text" : "password"}
+            required
+            minLength={6}
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="h-9 text-xs pr-9"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            tabIndex={-1}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+          >
+            {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          </button>
+        </div>
         <Button type="submit" disabled={loading} size="sm" className="w-full h-9 text-xs">
           {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : mode === "signup" ? "Create account" : "Sign in"}
         </Button>
