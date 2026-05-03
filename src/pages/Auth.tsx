@@ -14,9 +14,13 @@ export default function Auth() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [method, setMethod] = useState<"email" | "phone">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -56,7 +60,7 @@ export default function Auth() {
     setLoading(true);
     try {
       const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: `${window.location.origin}/app`,
+        redirect_uri: window.location.origin,
       });
       if (result.error) {
         toast.error("Google sign-in failed");
@@ -66,6 +70,28 @@ export default function Auth() {
       // result.redirected: browser handles redirect
     } catch (err) {
       toast.error("Google sign-in failed");
+      setLoading(false);
+    }
+  };
+
+  const handlePhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      if (!otpSent) {
+        const { error } = await supabase.auth.signInWithOtp({ phone });
+        if (error) throw error;
+        setOtpSent(true);
+        toast.success("Code sent");
+      } else {
+        const { error } = await supabase.auth.verifyOtp({ phone, token: otp, type: "sms" });
+        if (error) throw error;
+        toast.success("Signed in");
+        navigate("/app", { replace: true });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Phone sign-in failed");
+    } finally {
       setLoading(false);
     }
   };
@@ -113,7 +139,25 @@ export default function Auth() {
             <div className="flex-1 h-px bg-border" />
           </div>
 
-          <form onSubmit={handleEmail} className="space-y-3">
+          <div className="grid grid-cols-2 gap-1 rounded-md bg-secondary p-1">
+            <button
+              type="button"
+              onClick={() => setMethod("email")}
+              className={`h-9 rounded-md text-sm transition-colors ${method === "email" ? "bg-card text-foreground" : "text-muted-foreground"}`}
+            >
+              Email
+            </button>
+            <button
+              type="button"
+              onClick={() => setMethod("phone")}
+              className={`h-9 rounded-md text-sm transition-colors ${method === "phone" ? "bg-card text-foreground" : "text-muted-foreground"}`}
+            >
+              Phone
+            </button>
+          </div>
+
+          {method === "email" ? (
+            <form onSubmit={handleEmail} className="space-y-3">
             {mode === "signup" && (
               <div className="space-y-1.5">
                 <Label htmlFor="name">Display name</Label>
@@ -142,7 +186,24 @@ export default function Auth() {
             <Button type="submit" disabled={loading} className="w-full">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === "signin" ? "Sign in" : "Create account"}
             </Button>
-          </form>
+            </form>
+          ) : (
+            <form onSubmit={handlePhone} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="phone">Phone number</Label>
+                <Input id="phone" type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 000 0000" />
+              </div>
+              {otpSent && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="otp">Verification code</Label>
+                  <Input id="otp" inputMode="numeric" required value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" />
+                </div>
+              )}
+              <Button type="submit" disabled={loading} className="w-full">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : otpSent ? "Verify code" : "Send code"}
+              </Button>
+            </form>
+          )}
 
           <p className="text-center text-sm text-muted-foreground">
             {mode === "signin" ? "Don't have an account? " : "Already have one? "}

@@ -9,8 +9,12 @@ import { toast } from "sonner";
 
 export function SidebarAuth() {
   const [mode, setMode] = useState<"signin" | "signup">("signup");
+  const [method, setMethod] = useState<"email" | "phone">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -40,10 +44,31 @@ export function SidebarAuth() {
   const handleGoogle = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/app`,
+      redirect_uri: window.location.origin,
     });
     if (result.error) {
       toast.error("Google sign-in failed");
+      setLoading(false);
+    }
+  };
+
+  const handlePhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      if (!otpSent) {
+        const { error } = await supabase.auth.signInWithOtp({ phone });
+        if (error) throw error;
+        setOtpSent(true);
+        toast.success("Code sent");
+      } else {
+        const { error } = await supabase.auth.verifyOtp({ phone, token: otp, type: "sms" });
+        if (error) throw error;
+        toast.success("Signed in");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Phone sign-in failed");
+    } finally {
       setLoading(false);
     }
   };
@@ -86,15 +111,33 @@ export function SidebarAuth() {
         <div className="flex-1 h-px bg-border" />
       </div>
 
-      <form onSubmit={handleEmail} className="space-y-2">
-        <Input
-          type="email"
-          required
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="h-9 text-xs"
-        />
+      <div className="grid grid-cols-2 gap-1 rounded-md bg-secondary p-1">
+        <button
+          type="button"
+          onClick={() => setMethod("email")}
+          className={`h-8 rounded text-xs transition-colors ${method === "email" ? "bg-card text-foreground" : "text-muted-foreground"}`}
+        >
+          Email
+        </button>
+        <button
+          type="button"
+          onClick={() => setMethod("phone")}
+          className={`h-8 rounded text-xs transition-colors ${method === "phone" ? "bg-card text-foreground" : "text-muted-foreground"}`}
+        >
+          Phone
+        </button>
+      </div>
+
+      {method === "email" ? (
+        <form onSubmit={handleEmail} className="space-y-2">
+          <Input
+            type="email"
+            required
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-9 text-xs"
+          />
         <div className="relative">
           <Input
             type={showPassword ? "text" : "password"}
@@ -118,7 +161,32 @@ export function SidebarAuth() {
         <Button type="submit" disabled={loading} size="sm" className="w-full h-9 text-xs">
           {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : mode === "signup" ? "Create account" : "Sign in"}
         </Button>
-      </form>
+        </form>
+      ) : (
+        <form onSubmit={handlePhone} className="space-y-2">
+          <Input
+            type="tel"
+            required
+            placeholder="Phone number with country code"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="h-9 text-xs"
+          />
+          {otpSent && (
+            <Input
+              inputMode="numeric"
+              required
+              placeholder="Verification code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              className="h-9 text-xs"
+            />
+          )}
+          <Button type="submit" disabled={loading} size="sm" className="w-full h-9 text-xs">
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : otpSent ? "Verify code" : "Send code"}
+          </Button>
+        </form>
+      )}
 
       <button
         type="button"
