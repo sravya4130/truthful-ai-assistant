@@ -85,8 +85,8 @@ export default function Auth() {
           </p>
         </div>
 
-        {/* GLOW BORDER WRAPPER */}
-        <div className="relative rounded-2xl p-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 animate-[spin_6s_linear_infinite]">
+        {/* GLOW BORDER (STATIC) */}
+        <div className="relative rounded-2xl p-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500">
           <div className="glass rounded-2xl p-6 space-y-4 bg-black/40 backdrop-blur-md">
 
             <form onSubmit={handleEmail} className="space-y-3">
