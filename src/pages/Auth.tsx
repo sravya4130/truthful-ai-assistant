@@ -45,6 +45,7 @@ export default function Auth() {
         if (error) throw error;
 
         toast.success("Account created");
+        navigate("/app", { replace: true });
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
