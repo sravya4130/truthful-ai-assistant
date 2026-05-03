@@ -76,7 +76,7 @@ export default function Auth() {
               WebkitTextFillColor: "transparent",
             }}
           >
-            TRUTHFULAI
+            TRUTHFUL AI ASSISTANT 
           </Link>
           <p className="text-muted-foreground mt-2">
             {mode === "signin"
@@ -85,11 +85,12 @@ export default function Auth() {
           </p>
         </div>
 
-        {/* GLOW BORDER (STATIC) */}
+        {/* STATIC GLOW BORDER */}
         <div className="relative rounded-2xl p-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500">
           <div className="glass rounded-2xl p-6 space-y-4 bg-black/40 backdrop-blur-md">
 
             <form onSubmit={handleEmail} className="space-y-3">
+
               {mode === "signup" && (
                 <div className="space-y-1.5">
                   <Label htmlFor="name">Display name</Label>
@@ -171,6 +172,7 @@ export default function Auth() {
                 {mode === "signin" ? "Sign up" : "Sign in"}
               </button>
             </p>
+
           </div>
         </div>
 
