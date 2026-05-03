@@ -13,7 +13,7 @@ export default function Auth() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
-  const [mode, setMode] = useState<"signin" | "signup">("signup");
+  const [mode, setMode] = useState<"signin" | "signup">("signup"); // signup first
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -21,9 +21,7 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      navigate("/app", { replace: true });
-    }
+    if (!authLoading && user) navigate("/app", { replace: true });
   }, [user, authLoading, navigate]);
 
   const handleEmail = async (e: React.FormEvent) => {
@@ -37,31 +35,21 @@ export default function Auth() {
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/app`,
-            data: {
-              full_name: displayName || email.split("@")[0],
-            },
+            data: { full_name: displayName || email.split("@")[0] },
           },
         });
-
         if (error) throw error;
-
-        toast.success("Account created. Check your email if confirmation is enabled.");
+        toast.success("Account created");
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-
         if (error) throw error;
-
         toast.success("Welcome back");
-        navigate("/app");
       }
-    } catch (err: any) {
-      console.log("Auth error:", err);
-
-      // 🔥 IMPORTANT FIX: show real error instead of fake message
-      toast.error(err.message || "Authentication failed");
+    } catch (err) {
+      toast.error("Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -115,7 +103,7 @@ export default function Auth() {
               <div>
                 <Label>
                   {mode === "signup"
-                    ? "Create password (min 6 chars)"
+                    ? "Create your own password (not your email password)"
                     : "Password"}
                 </Label>
 
@@ -129,7 +117,6 @@ export default function Auth() {
                     placeholder="••••••••"
                     className="pr-10"
                   />
-
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -150,6 +137,15 @@ export default function Auth() {
                 )}
               </Button>
             </form>
+
+            {/* CONTINUE AS GUEST */}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate("/app")}
+            >
+              Continue as Guest
+            </Button>
 
             {/* SWITCH */}
             <p className="text-center text-sm text-muted-foreground">
