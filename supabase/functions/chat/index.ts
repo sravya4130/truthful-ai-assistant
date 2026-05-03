@@ -7,67 +7,127 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/* -------------------- EMOTION DETECTION -------------------- */
+function detectEmotion(text: string) {
+  const t = text.toLowerCase();
+
+  const emotionalKeywords = [
+    "breakup","broke up","hurt","pain","sad","cry","crying",
+    "depressed","lonely","alone","miss","heartbroken",
+    "anxiety","stress","overthinking","tired","lost",
+    "feeling low","not okay","upset","empty"
+  ];
+
+  let score = 0;
+  for (const word of emotionalKeywords) {
+    if (t.includes(word)) score++;
+  }
+
+  if (score >= 2) return "high";
+  if (score === 1) return "medium";
+  return "none";
+}
+
+/* -------------------- MONEY INTENT -------------------- */
+function isMoneyIntent(text: string) {
+  const t = text.toLowerCase();
+  return (
+    t.includes("money") ||
+    t.includes("earn") ||
+    t.includes("income") ||
+    t.includes("online job") ||
+    t.includes("make money")
+  );
+}
+
+/* -------------------- AGE TONE -------------------- */
 const ageGuidance = (age: number | null) => {
   if (!age) return "Age unknown. Use simple casual words.";
-  if (age < 13) return `User is ${age} (child). Very simple words. Nothing mature.`;
+  if (age < 13) return `User is ${age} (child). Very simple words.`;
   if (age < 18) return `User is ${age} (teen). Casual, chill, relatable.`;
   if (age < 25) return `User is ${age} (young adult). Casual, modern.`;
-  if (age < 40) return `User is ${age} (adult). Peer tone, direct.`;
+  if (age < 40) return `User is ${age} (adult). Peer tone.`;
   return `User is ${age}. Respectful, casual tone.`;
 };
 
+/* -------------------- GLOBAL RULES -------------------- */
 const GLOBAL_RULES = `
 HARD RULES — FOLLOW EXACTLY:
 
-1. Normal replies MUST be 1–5 short lines max. No long paragraphs.
+1. Normal replies MUST be 1–5 short lines max.
 
-2. EXCEPTION: If the user is emotional (breakup, sadness, stress, loneliness, feeling low):
-   - Reply can be slightly longer (4–8 short lines).
-   - Start with empathy.
-   - DO NOT ask any questions.
-   - Give 2–4 simple, practical suggestions to help them feel better or cope.
-   - Tone should feel human, calm, and supportive — not robotic.
+2. EXCEPTION: If emotional:
+- 5–10 short lines allowed
+- no questions
+- empathy + 2–4 real suggestions
+- human tone (not robotic)
 
-3. WhatsApp-style casual chat tone. Friendly, chill, lowercase ok.
+3. WhatsApp casual tone.
 
-4. NEVER lecture, moralize, or motivate. NEVER say:
-   "brutal truth", "stop wasting time", "focus on your life", "here is the logic", "you should", "let me explain".
+4. No lectures, no motivation talk.
 
-5. Detect intent before replying:
-   - Structured goals/roadmaps → step-by-step help
-   - Emotional messages → comfort + suggestions
+5. Detect intent:
+- goals → step-by-step
+- emotional → comfort
 
-6. If the user shares something emotional without asking for a roadmap/plan:
-   - DO NOT ask any questions
-   - DO NOT use question marks
-   - Just support + suggestions
+6. Emotional:
+- no questions
+- no generic advice
 
-7. If the user asks a DECISION question ("should I…", "A or B"):
-   - Ask EXACTLY ONE short clarifying question
-   - Wait for reply
+7. Decision questions:
+- ask ONLY ONE question
 
-8. NEVER ask more than ONE question in a single message.
+8. Never ask more than 1 question.
 
-9. If the user is rude:
-   - Reply ONE calm short line only
+9. Rude user → 1 calm line.
 
-10. Use bullet points ONLY if user asks for it.
+10. No formatting unless asked.
+
+11. MONEY / JOB:
+- ask 1 question at a time
+- after enough info → suggest 2–4 ways
+- include REAL links
+- beginner friendly
 `;
 
-const SYSTEM_PROMPTS = (mode: string, age: number | null) => {
+/* -------------------- SYSTEM PROMPTS -------------------- */
+const SYSTEM_PROMPTS = (mode: string, age: number | null, emotion: string) => {
   const ageLine = ageGuidance(age);
-  const base = `\n${GLOBAL_RULES}\nAGE: ${ageLine}`;
+
+  const emotionBoost =
+    emotion === "high"
+      ? `
+EMOTIONAL MODE HIGH:
+- deeper response
+- more personal suggestions
+`
+      : emotion === "medium"
+      ? `
+EMOTIONAL MODE MEDIUM:
+- empathy + light suggestions
+`
+      : "";
+
+  const base = `\n${GLOBAL_RULES}\nAGE: ${ageLine}\n${emotionBoost}`;
 
   const map: Record<string, string> = {
-    chat: `You are a friendly casual chat assistant. Short replies only.${base}`,
+    chat: `Friendly casual assistant.${base}`,
 
-    transform: `You are in "Transform Me" mode. Ask ONE short question at a time about what they want to become and their situation. After ~4 questions (one per turn), give a short plan in <=6 bullet points. Never dump multiple questions.${base}`,
+    transform: `Transform mode. Ask 1 question per turn.${base}`,
 
-    roadmap: `You are in "Roadmap Generator" mode. NEVER give a roadmap on the first message. Ask ONE short clarifying question per turn (e.g. "how many hours/day can you study?"). After ~4–6 single questions, give a short roadmap as bullet points (<=10 bullets). One question per message — strict.${base}`,
+    roadmap: `Roadmap mode. Ask 1 question per turn.${base}`,
+
+    money: `Make Money Guide mode:
+- ask 1 question at a time
+- understand user
+- then suggest ways + links
+${base}`,
   };
+
   return map[mode] || map.chat;
 };
 
+/* -------------------- SERVER -------------------- */
 serve(async (req) => {
   if (req.method === "OPTIONS")
     return new Response(null, { headers: corsHeaders });
@@ -75,11 +135,21 @@ serve(async (req) => {
   try {
     const { messages, mode = "chat" } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) throw new Error("Missing API key");
 
-    // Try to fetch user age from profile (optional — works without auth too)
+    const lastMessage = messages[messages.length - 1]?.content || "";
+
+    const emotion = detectEmotion(lastMessage);
+
+    let finalMode = mode;
+    if (isMoneyIntent(lastMessage)) {
+      finalMode = "money";
+    }
+
+    /* ---- OPTIONAL AGE FETCH ---- */
     let age: number | null = null;
     const authHeader = req.headers.get("Authorization");
+
     if (authHeader) {
       try {
         const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -87,21 +157,24 @@ serve(async (req) => {
         const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
           global: { headers: { Authorization: authHeader } },
         });
+
         const { data: { user } } = await userClient.auth.getUser();
+
         if (user) {
           const { data: profile } = await userClient
             .from("profiles")
             .select("age")
             .eq("user_id", user.id)
             .maybeSingle();
+
           if (profile?.age) age = profile.age;
         }
       } catch (e) {
-        console.warn("Could not fetch user age", e);
+        console.warn("Age fetch failed");
       }
     }
 
-    const systemPrompt = SYSTEM_PROMPTS(mode, age);
+    const systemPrompt = SYSTEM_PROMPTS(finalMode, age, emotion);
 
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
@@ -123,34 +196,20 @@ serve(async (req) => {
     );
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limited. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
       return new Response(
-        JSON.stringify({ error: "AI gateway error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "AI error" }),
+        { status: 500, headers: corsHeaders }
       );
     }
 
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
+
   } catch (e) {
-    console.error("chat error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: "Server error" }),
+      { status: 500, headers: corsHeaders }
     );
   }
 });
