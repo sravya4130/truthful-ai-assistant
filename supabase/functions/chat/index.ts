@@ -1,87 +1,65 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type",
 };
 
-/* ---------------- EMOTION DETECTION ---------------- */
+/* -------- EMOTION DETECTION -------- */
 function detectEmotion(text: string) {
   const t = text.toLowerCase();
   const words = ["breakup","sad","hurt","cry","lonely","depressed","stress"];
   let score = 0;
   words.forEach(w => { if (t.includes(w)) score++; });
+
   if (score >= 2) return "high";
   if (score === 1) return "medium";
   return "none";
 }
 
-/* ---------------- MONEY INTENT ---------------- */
+/* -------- MONEY INTENT -------- */
 function isMoneyIntent(text: string) {
   const t = text.toLowerCase();
   return t.includes("money") || t.includes("earn") || t.includes("income");
 }
 
-/* ---------------- MEMORY ---------------- */
-async function getMemory(client: any, userId: string) {
-  const { data } = await client
-    .from("user_memory")
-    .select("data")
-    .eq("user_id", userId)
-    .maybeSingle();
-  return data?.data || {};
-}
-
-async function saveMemory(client: any, userId: string, newData: any) {
-  const old = await getMemory(client, userId);
-  await client.from("user_memory").upsert({
-    user_id: userId,
-    data: { ...old, ...newData }
-  });
-}
-
-function extractPrefs(text: string) {
-  const t = text.toLowerCase();
-  const prefs: any = {};
-  if (t.includes("hour")) prefs.hours = text;
-  if (t.includes("face")) prefs.face = t.includes("no") ? "no" : "yes";
-  return prefs;
-}
-
-/* ---------------- RULES ---------------- */
-const GLOBAL_RULES = `
-- normal: short replies
-- emotional: longer, no questions, suggestions
-- money: ask first, then suggest with links
-`;
-
-/* ---------------- PROMPT ---------------- */
-function SYSTEM_PROMPT(mode: string, emotion: string, memory: any) {
+/* -------- PROMPT -------- */
+function SYSTEM_PROMPT(mode: string, emotion: string) {
 
   if (mode === "money") {
     return `
-Make Money Guide:
+You are in Make Money Guide mode.
 
-STRICT:
-- start: "you can definitely do this, let's start"
-- ask ONE question
-- ask 2–4 questions total
-- DO NOT suggest early
+STRICT FLOW:
+- Start with: "you can definitely do this, let's start"
+- Ask ONLY ONE question
+- Ask 2–4 questions total
+- DO NOT give suggestions early
 
-USER MEMORY: ${JSON.stringify(memory)}
+After enough answers:
+- Suggest 2–4 ways to earn
+- Include real links
 
-After enough info:
-- suggest ways
-- include real links
-${GLOBAL_RULES}
+Tone: simple, confident, helpful
 `;
   }
 
-  return `Friendly assistant\n${GLOBAL_RULES}`;
+  if (emotion !== "none") {
+    return `
+User is emotional.
+
+- Reply 5–10 short lines
+- No questions
+- Show empathy
+- Give 2–4 real suggestions
+- Sound like a friend, not a robot
+`;
+  }
+
+  return `Friendly short assistant.`;
 }
 
-/* ---------------- SERVER ---------------- */
+/* -------- SERVER -------- */
 serve(async (req) => {
 
   if (req.method === "OPTIONS") {
@@ -95,36 +73,9 @@ serve(async (req) => {
     const last = messages[messages.length - 1]?.content || "";
 
     const emotion = detectEmotion(last);
-    let mode = isMoneyIntent(last) ? "money" : "chat";
+    const mode = isMoneyIntent(last) ? "money" : "chat";
 
-    /* -------- MEMORY -------- */
-    let memory = {};
-    let client: any = null;
-
-    const auth = req.headers.get("Authorization");
-
-    if (auth) {
-      const url = Deno.env.get("SUPABASE_URL")!;
-      const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-      client = createClient(url, anon, {
-        global: { headers: { Authorization: auth } }
-      });
-
-      const { data: { user } } = await client.auth.getUser();
-
-      if (user) {
-        memory = await getMemory(client, user.id);
-
-        const newPrefs = extractPrefs(last);
-        if (Object.keys(newPrefs).length) {
-          await saveMemory(client, user.id, newPrefs);
-          memory = { ...memory, ...newPrefs };
-        }
-      }
-    }
-
-    const prompt = SYSTEM_PROMPT(mode, emotion, memory);
+    const prompt = SYSTEM_PROMPT(mode, emotion);
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
