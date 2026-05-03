@@ -13,12 +13,10 @@ export default function Auth() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-
+  const [mode, setMode] = useState<"signin" | "signup">("signup"); // signup first
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -29,6 +27,7 @@ export default function Auth() {
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
@@ -40,15 +39,17 @@ export default function Auth() {
           },
         });
         if (error) throw error;
-        toast.success("Account created — welcome to TruthAI");
+        toast.success("Account created");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         if (error) throw error;
         toast.success("Welcome back");
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Authentication failed";
-      toast.error(msg);
+      toast.error("Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -62,40 +63,25 @@ export default function Auth() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
         className="w-full max-w-md"
       >
-        {/* LOGO */}
+        {/* TITLE */}
         <div className="text-center mb-8">
-          <Link
-            to="/"
-            className="font-heading text-5xl font-bold tracking-wide"
-            style={{
-              background: "linear-gradient(90deg, #ff00cc, #3333ff, #00ffee)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            TRUTHFUL AI ASSISTANT 
+          <Link to="/" className="text-5xl font-bold text-gradient">
+            TRUTHFULAI
           </Link>
-          <p className="text-muted-foreground mt-2">
-            {mode === "signin"
-              ? "Welcome back. Time for honest answers."
-              : "Sign up. No fluff. Just truth."}
-          </p>
         </div>
 
-        {/* STATIC GLOW BORDER */}
-        <div className="relative rounded-2xl p-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500">
-          <div className="glass rounded-2xl p-6 space-y-4 bg-black/40 backdrop-blur-md">
+        {/* BOX */}
+        <div className="rounded-2xl p-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500">
+          <div className="glass rounded-2xl p-6 space-y-4 bg-black/40">
 
             <form onSubmit={handleEmail} className="space-y-3">
 
               {mode === "signup" && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">Display name</Label>
+                <div>
+                  <Label>Display name</Label>
                   <Input
-                    id="name"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     placeholder="Your name"
@@ -103,10 +89,9 @@ export default function Auth() {
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
+              <div>
+                <Label>Email</Label>
                 <Input
-                  id="email"
                   type="email"
                   required
                   value={email}
@@ -115,15 +100,15 @@ export default function Auth() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="password">
+              <div>
+                <Label>
                   {mode === "signup"
                     ? "Create your own password (not your email password)"
                     : "Password"}
                 </Label>
+
                 <div className="relative">
                   <Input
-                    id="password"
                     type={showPassword ? "text" : "password"}
                     required
                     minLength={6}
@@ -135,52 +120,50 @@ export default function Auth() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
                   >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
+                    {showPassword ? <EyeOff /> : <Eye />}
                   </button>
                 </div>
               </div>
 
               <Button type="submit" disabled={loading} className="w-full">
                 {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : mode === "signin" ? (
-                  "Sign in"
-                ) : (
+                  <Loader2 className="animate-spin" />
+                ) : mode === "signup" ? (
                   "Create account"
+                ) : (
+                  "Sign in"
                 )}
               </Button>
             </form>
 
+            {/* CONTINUE AS GUEST */}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate("/app")}
+            >
+              Continue as Guest
+            </Button>
+
+            {/* SWITCH */}
             <p className="text-center text-sm text-muted-foreground">
-              {mode === "signin"
-                ? "Don't have an account? "
-                : "Already have one? "}
+              {mode === "signup"
+                ? "Already have an account? "
+                : "Don't have an account? "}
               <button
-                type="button"
                 onClick={() =>
-                  setMode(mode === "signin" ? "signup" : "signin")
+                  setMode(mode === "signup" ? "signin" : "signup")
                 }
-                className="text-primary hover:underline font-medium"
+                className="text-primary underline"
               >
-                {mode === "signin" ? "Sign up" : "Sign in"}
+                {mode === "signup" ? "Log in" : "Sign up"}
               </button>
             </p>
 
           </div>
         </div>
-
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          <Link to="/" className="hover:text-foreground transition-colors">
-            ← Back to home
-          </Link>
-        </p>
       </motion.div>
     </div>
   );
