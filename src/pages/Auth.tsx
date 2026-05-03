@@ -36,7 +36,6 @@ export default function Auth() {
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/app`,
             data: {
               full_name: displayName || email.split("@")[0],
             },
@@ -45,7 +44,7 @@ export default function Auth() {
 
         if (error) throw error;
 
-        toast.success("Account created. Check your email if confirmation is enabled.");
+        toast.success("Account created");
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -54,13 +53,10 @@ export default function Auth() {
 
         if (error) throw error;
 
-        toast.success("Welcome back");
-        navigate("/app");
+        toast.success("Login successful");
+        navigate("/app", { replace: true });
       }
     } catch (err: any) {
-      console.log("Auth error:", err);
-
-      // 🔥 IMPORTANT FIX: show real error instead of fake message
       toast.error(err.message || "Authentication failed");
     } finally {
       setLoading(false);
@@ -68,23 +64,18 @@ export default function Auth() {
   };
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4"
-      style={{ background: "var(--gradient-surface)" }}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
-      >
-        {/* TITLE */}
+    <div className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: "var(--gradient-surface)" }}>
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md">
+
         <div className="text-center mb-8">
           <Link to="/" className="text-5xl font-bold text-gradient">
             TRUTHFULAI
           </Link>
         </div>
 
-        {/* BOX */}
         <div className="rounded-2xl p-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500">
           <div className="glass rounded-2xl p-6 space-y-4 bg-black/40">
 
@@ -96,7 +87,6 @@ export default function Auth() {
                   <Input
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Your name"
                   />
                 </div>
               )}
@@ -108,16 +98,11 @@ export default function Auth() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
                 />
               </div>
 
               <div>
-                <Label>
-                  {mode === "signup"
-                    ? "Create password (min 6 chars)"
-                    : "Password"}
-                </Label>
+                <Label>Password</Label>
 
                 <div className="relative">
                   <Input
@@ -126,7 +111,6 @@ export default function Auth() {
                     minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
                     className="pr-10"
                   />
 
@@ -141,33 +125,30 @@ export default function Auth() {
               </div>
 
               <Button type="submit" disabled={loading} className="w-full">
-                {loading ? (
-                  <Loader2 className="animate-spin" />
-                ) : mode === "signup" ? (
-                  "Create account"
-                ) : (
-                  "Sign in"
-                )}
+                {loading ? <Loader2 className="animate-spin" /> :
+                  mode === "signup" ? "Create account" : "Sign in"}
               </Button>
+
             </form>
 
-            {/* SWITCH */}
             <p className="text-center text-sm text-muted-foreground">
               {mode === "signup"
-                ? "Already have an account? "
-                : "Don't have an account? "}
+                ? "Already have an account?"
+                : "Don't have an account?"}
+
               <button
                 onClick={() =>
                   setMode(mode === "signup" ? "signin" : "signup")
                 }
-                className="text-primary underline"
+                className="text-primary underline ml-1"
               >
-                {mode === "signup" ? "Log in" : "Sign up"}
+                {mode === "signup" ? "Login" : "Sign up"}
               </button>
             </p>
 
           </div>
         </div>
+
       </motion.div>
     </div>
   );
