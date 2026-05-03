@@ -21,7 +21,9 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && user) navigate("/app", { replace: true });
+    if (!authLoading && user) {
+      navigate("/app", { replace: true });
+    }
   }, [user, authLoading, navigate]);
 
   const handleEmail = async (e: React.FormEvent) => {
@@ -35,21 +37,31 @@ export default function Auth() {
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/app`,
-            data: { full_name: displayName || email.split("@")[0] },
+            data: {
+              full_name: displayName || email.split("@")[0],
+            },
           },
         });
+
         if (error) throw error;
-        toast.success("Account created");
+
+        toast.success("Account created. Check your email if confirmation is enabled.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
+
         if (error) throw error;
+
         toast.success("Welcome back");
+        navigate("/app");
       }
-    } catch (err) {
-      toast.error("Authentication failed");
+    } catch (err: any) {
+      console.log("Auth error:", err);
+
+      // 🔥 IMPORTANT FIX: show real error instead of fake message
+      toast.error(err.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -103,7 +115,7 @@ export default function Auth() {
               <div>
                 <Label>
                   {mode === "signup"
-                    ? "Create your own password (not your email password)"
+                    ? "Create password (min 6 chars)"
                     : "Password"}
                 </Label>
 
@@ -117,6 +129,7 @@ export default function Auth() {
                     placeholder="••••••••"
                     className="pr-10"
                   />
+
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
