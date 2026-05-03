@@ -3,213 +3,153 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, content-type",
 };
 
-/* -------------------- EMOTION DETECTION -------------------- */
+/* ---------------- EMOTION DETECTION ---------------- */
 function detectEmotion(text: string) {
   const t = text.toLowerCase();
-
-  const emotionalKeywords = [
-    "breakup","broke up","hurt","pain","sad","cry","crying",
-    "depressed","lonely","alone","miss","heartbroken",
-    "anxiety","stress","overthinking","tired","lost",
-    "feeling low","not okay","upset","empty"
-  ];
-
+  const words = ["breakup","sad","hurt","cry","lonely","depressed","stress"];
   let score = 0;
-  for (const word of emotionalKeywords) {
-    if (t.includes(word)) score++;
-  }
-
+  words.forEach(w => { if (t.includes(w)) score++; });
   if (score >= 2) return "high";
   if (score === 1) return "medium";
   return "none";
 }
 
-/* -------------------- MONEY INTENT -------------------- */
+/* ---------------- MONEY INTENT ---------------- */
 function isMoneyIntent(text: string) {
   const t = text.toLowerCase();
-  return (
-    t.includes("money") ||
-    t.includes("earn") ||
-    t.includes("income") ||
-    t.includes("online job") ||
-    t.includes("make money")
-  );
+  return t.includes("money") || t.includes("earn") || t.includes("income");
 }
 
-/* -------------------- AGE TONE -------------------- */
-const ageGuidance = (age: number | null) => {
-  if (!age) return "Age unknown. Use simple casual words.";
-  if (age < 13) return `User is ${age} (child). Very simple words.`;
-  if (age < 18) return `User is ${age} (teen). Casual, chill, relatable.`;
-  if (age < 25) return `User is ${age} (young adult). Casual, modern.`;
-  if (age < 40) return `User is ${age} (adult). Peer tone.`;
-  return `User is ${age}. Respectful, casual tone.`;
-};
+/* ---------------- MEMORY ---------------- */
+async function getMemory(client: any, userId: string) {
+  const { data } = await client
+    .from("user_memory")
+    .select("data")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.data || {};
+}
 
-/* -------------------- GLOBAL RULES -------------------- */
+async function saveMemory(client: any, userId: string, newData: any) {
+  const old = await getMemory(client, userId);
+  await client.from("user_memory").upsert({
+    user_id: userId,
+    data: { ...old, ...newData }
+  });
+}
+
+function extractPrefs(text: string) {
+  const t = text.toLowerCase();
+  const prefs: any = {};
+  if (t.includes("hour")) prefs.hours = text;
+  if (t.includes("face")) prefs.face = t.includes("no") ? "no" : "yes";
+  return prefs;
+}
+
+/* ---------------- RULES ---------------- */
 const GLOBAL_RULES = `
-HARD RULES — FOLLOW EXACTLY:
-
-1. Normal replies MUST be 1–5 short lines max.
-
-2. EXCEPTION: If emotional:
-- 5–10 short lines allowed
-- no questions
-- empathy + 2–4 real suggestions
-- human tone (not robotic)
-
-3. WhatsApp casual tone.
-
-4. No lectures, no motivation talk.
-
-5. Detect intent:
-- goals → step-by-step
-- emotional → comfort
-
-6. Emotional:
-- no questions
-- no generic advice
-
-7. Decision questions:
-- ask ONLY ONE question
-
-8. Never ask more than 1 question.
-
-9. Rude user → 1 calm line.
-
-10. No formatting unless asked.
-
-11. MONEY / JOB:
-- ask 1 question at a time
-- after enough info → suggest 2–4 ways
-- include REAL links
-- beginner friendly
+- normal: short replies
+- emotional: longer, no questions, suggestions
+- money: ask first, then suggest with links
 `;
 
-/* -------------------- SYSTEM PROMPTS -------------------- */
-const SYSTEM_PROMPTS = (mode: string, age: number | null, emotion: string) => {
-  const ageLine = ageGuidance(age);
+/* ---------------- PROMPT ---------------- */
+function SYSTEM_PROMPT(mode: string, emotion: string, memory: any) {
 
-  const emotionBoost =
-    emotion === "high"
-      ? `
-EMOTIONAL MODE HIGH:
-- deeper response
-- more personal suggestions
-`
-      : emotion === "medium"
-      ? `
-EMOTIONAL MODE MEDIUM:
-- empathy + light suggestions
-`
-      : "";
+  if (mode === "money") {
+    return `
+Make Money Guide:
 
-  const base = `\n${GLOBAL_RULES}\nAGE: ${ageLine}\n${emotionBoost}`;
+STRICT:
+- start: "you can definitely do this, let's start"
+- ask ONE question
+- ask 2–4 questions total
+- DO NOT suggest early
 
-  const map: Record<string, string> = {
-    chat: `Friendly casual assistant.${base}`,
+USER MEMORY: ${JSON.stringify(memory)}
 
-    transform: `Transform mode. Ask 1 question per turn.${base}`,
+After enough info:
+- suggest ways
+- include real links
+${GLOBAL_RULES}
+`;
+  }
 
-    roadmap: `Roadmap mode. Ask 1 question per turn.${base}`,
+  return `Friendly assistant\n${GLOBAL_RULES}`;
+}
 
-    money: `Make Money Guide mode:
-- ask 1 question at a time
-- understand user
-- then suggest ways + links
-${base}`,
-  };
-
-  return map[mode] || map.chat;
-};
-
-/* -------------------- SERVER -------------------- */
+/* ---------------- SERVER ---------------- */
 serve(async (req) => {
-  if (req.method === "OPTIONS")
+
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
 
   try {
-    const { messages, mode = "chat" } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("Missing API key");
+    const { messages } = await req.json();
+    const key = Deno.env.get("LOVABLE_API_KEY");
 
-    const lastMessage = messages[messages.length - 1]?.content || "";
+    const last = messages[messages.length - 1]?.content || "";
 
-    const emotion = detectEmotion(lastMessage);
+    const emotion = detectEmotion(last);
+    let mode = isMoneyIntent(last) ? "money" : "chat";
 
-    let finalMode = mode;
-    if (isMoneyIntent(lastMessage)) {
-      finalMode = "money";
-    }
+    /* -------- MEMORY -------- */
+    let memory = {};
+    let client: any = null;
 
-    /* ---- OPTIONAL AGE FETCH ---- */
-    let age: number | null = null;
-    const authHeader = req.headers.get("Authorization");
+    const auth = req.headers.get("Authorization");
 
-    if (authHeader) {
-      try {
-        const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-        const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-        const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-          global: { headers: { Authorization: authHeader } },
-        });
+    if (auth) {
+      const url = Deno.env.get("SUPABASE_URL")!;
+      const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-        const { data: { user } } = await userClient.auth.getUser();
+      client = createClient(url, anon, {
+        global: { headers: { Authorization: auth } }
+      });
 
-        if (user) {
-          const { data: profile } = await userClient
-            .from("profiles")
-            .select("age")
-            .eq("user_id", user.id)
-            .maybeSingle();
+      const { data: { user } } = await client.auth.getUser();
 
-          if (profile?.age) age = profile.age;
+      if (user) {
+        memory = await getMemory(client, user.id);
+
+        const newPrefs = extractPrefs(last);
+        if (Object.keys(newPrefs).length) {
+          await saveMemory(client, user.id, newPrefs);
+          memory = { ...memory, ...newPrefs };
         }
-      } catch (e) {
-        console.warn("Age fetch failed");
       }
     }
 
-    const systemPrompt = SYSTEM_PROMPTS(finalMode, age, emotion);
+    const prompt = SYSTEM_PROMPT(mode, emotion, memory);
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...messages,
-          ],
-          stream: true,
-        }),
-      }
-    );
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: prompt },
+          ...messages
+        ],
+        stream: true
+      })
+    });
 
-    if (!response.ok) {
-      return new Response(
-        JSON.stringify({ error: "AI error" }),
-        { status: 500, headers: corsHeaders }
-      );
-    }
-
-    return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+    return new Response(res.body, {
+      headers: { ...corsHeaders, "Content-Type": "text/event-stream" }
     });
 
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: "Server error" }),
-      { status: 500, headers: corsHeaders }
-    );
+    return new Response(JSON.stringify({ error: "error" }), {
+      status: 500,
+      headers: corsHeaders
+    });
   }
 });
