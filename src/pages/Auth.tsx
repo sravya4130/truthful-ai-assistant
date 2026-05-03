@@ -14,14 +14,10 @@ export default function Auth() {
   const { user, loading: authLoading } = useAuth();
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [method, setMethod] = useState<"email" | "phone">("email");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -58,28 +54,6 @@ export default function Auth() {
     }
   };
 
-  const handlePhone = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      if (!otpSent) {
-        const { error } = await supabase.auth.signInWithOtp({ phone });
-        if (error) throw error;
-        setOtpSent(true);
-        toast.success("Code sent");
-      } else {
-        const { error } = await supabase.auth.verifyOtp({ phone, token: otp, type: "sms" });
-        if (error) throw error;
-        toast.success("Signed in");
-        navigate("/app", { replace: true });
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Phone sign-in failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div
       className="min-h-screen flex items-center justify-center px-4"
@@ -91,9 +65,18 @@ export default function Auth() {
         transition={{ duration: 0.4 }}
         className="w-full max-w-md"
       >
+        {/* LOGO */}
         <div className="text-center mb-8">
-          <Link to="/" className="font-heading text-4xl font-bold text-gradient">
-            TruthAI
+          <Link
+            to="/"
+            className="font-heading text-5xl font-bold tracking-wide"
+            style={{
+              background: "linear-gradient(90deg, #ff00cc, #3333ff, #00ffee)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            TRUTHFULAI
           </Link>
           <p className="text-muted-foreground mt-2">
             {mode === "signin"
@@ -102,35 +85,10 @@ export default function Auth() {
           </p>
         </div>
 
-        <div className="glass rounded-2xl p-6 space-y-4">
+        {/* GLOW BORDER WRAPPER */}
+        <div className="relative rounded-2xl p-[2px] bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 animate-[spin_6s_linear_infinite]">
+          <div className="glass rounded-2xl p-6 space-y-4 bg-black/40 backdrop-blur-md">
 
-          {/* Email / Phone toggle */}
-          <div className="grid grid-cols-2 gap-1 rounded-md bg-secondary p-1">
-            <button
-              type="button"
-              onClick={() => setMethod("email")}
-              className={`h-9 rounded-md text-sm transition-colors ${
-                method === "email"
-                  ? "bg-card text-foreground"
-                  : "text-muted-foreground"
-              }`}
-            >
-              Email
-            </button>
-            <button
-              type="button"
-              onClick={() => setMethod("phone")}
-              className={`h-9 rounded-md text-sm transition-colors ${
-                method === "phone"
-                  ? "bg-card text-foreground"
-                  : "text-muted-foreground"
-              }`}
-            >
-              Phone
-            </button>
-          </div>
-
-          {method === "email" ? (
             <form onSubmit={handleEmail} className="space-y-3">
               {mode === "signup" && (
                 <div className="space-y-1.5">
@@ -157,7 +115,11 @@ export default function Auth() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">
+                  {mode === "signup"
+                    ? "Create your own password (not your email password)"
+                    : "Password"}
+                </Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -194,60 +156,22 @@ export default function Auth() {
                 )}
               </Button>
             </form>
-          ) : (
-            <form onSubmit={handlePhone} className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="phone">Phone number</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+91XXXXXXXXXX"
-                />
-              </div>
 
-              {otpSent && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="otp">Verification code</Label>
-                  <Input
-                    id="otp"
-                    inputMode="numeric"
-                    required
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    placeholder="123456"
-                  />
-                </div>
-              )}
-
-              <Button type="submit" disabled={loading} className="w-full">
-                {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : otpSent ? (
-                  "Verify code"
-                ) : (
-                  "Send code"
-                )}
-              </Button>
-            </form>
-          )}
-
-          <p className="text-center text-sm text-muted-foreground">
-            {mode === "signin"
-              ? "Don't have an account? "
-              : "Already have one? "}
-            <button
-              type="button"
-              onClick={() =>
-                setMode(mode === "signin" ? "signup" : "signin")
-              }
-              className="text-primary hover:underline font-medium"
-            >
-              {mode === "signin" ? "Sign up" : "Sign in"}
-            </button>
-          </p>
+            <p className="text-center text-sm text-muted-foreground">
+              {mode === "signin"
+                ? "Don't have an account? "
+                : "Already have one? "}
+              <button
+                type="button"
+                onClick={() =>
+                  setMode(mode === "signin" ? "signup" : "signin")
+                }
+                className="text-primary hover:underline font-medium"
+              >
+                {mode === "signin" ? "Sign up" : "Sign in"}
+              </button>
+            </p>
+          </div>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
