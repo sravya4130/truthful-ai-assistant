@@ -12,13 +12,17 @@ import { Loader2, Eye, EyeOff } from "lucide-react";
 export default function Auth() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [method, setMethod] = useState<"email" | "phone">("email");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -92,27 +96,35 @@ export default function Auth() {
             TruthAI
           </Link>
           <p className="text-muted-foreground mt-2">
-            {mode === "signin" ? "Welcome back. Time for honest answers." : "Sign up. No fluff. Just truth."}
+            {mode === "signin"
+              ? "Welcome back. Time for honest answers."
+              : "Sign up. No fluff. Just truth."}
           </p>
         </div>
 
         <div className="glass rounded-2xl p-6 space-y-4">
-          
 
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <div className="flex-1 h-px bg-border" />
+          {/* Email / Phone toggle */}
           <div className="grid grid-cols-2 gap-1 rounded-md bg-secondary p-1">
             <button
               type="button"
               onClick={() => setMethod("email")}
-              className={`h-9 rounded-md text-sm transition-colors ${method === "email" ? "bg-card text-foreground" : "text-muted-foreground"}`}
+              className={`h-9 rounded-md text-sm transition-colors ${
+                method === "email"
+                  ? "bg-card text-foreground"
+                  : "text-muted-foreground"
+              }`}
             >
               Email
             </button>
             <button
               type="button"
               onClick={() => setMethod("phone")}
-              className={`h-9 rounded-md text-sm transition-colors ${method === "phone" ? "bg-card text-foreground" : "text-muted-foreground"}`}
+              className={`h-9 rounded-md text-sm transition-colors ${
+                method === "phone"
+                  ? "bg-card text-foreground"
+                  : "text-muted-foreground"
+              }`}
             >
               Phone
             </button>
@@ -120,58 +132,117 @@ export default function Auth() {
 
           {method === "email" ? (
             <form onSubmit={handleEmail} className="space-y-3">
-            {mode === "signup" && (
+              {mode === "signup" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="name">Display name</Label>
+                  <Input
+                    id="name"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Your name"
+                  />
+                </div>
+              )}
+
               <div className="space-y-1.5">
-                <Label htmlFor="name">Display name</Label>
-                <Input id="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name" />
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
               </div>
-            )}
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Input id="password" type={showPassword ? "text" : "password"} required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="pr-10" />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  tabIndex={-1}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === "signin" ? "Sign in" : "Create account"}
-            </Button>
+
+              <Button type="submit" disabled={loading} className="w-full">
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : mode === "signin" ? (
+                  "Sign in"
+                ) : (
+                  "Create account"
+                )}
+              </Button>
             </form>
           ) : (
             <form onSubmit={handlePhone} className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="phone">Phone number</Label>
-                <Input id="phone" type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 000 0000" />
+                <Input
+                  id="phone"
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+91XXXXXXXXXX"
+                />
               </div>
+
               {otpSent && (
                 <div className="space-y-1.5">
                   <Label htmlFor="otp">Verification code</Label>
-                  <Input id="otp" inputMode="numeric" required value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" />
+                  <Input
+                    id="otp"
+                    inputMode="numeric"
+                    required
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    placeholder="123456"
+                  />
                 </div>
               )}
+
               <Button type="submit" disabled={loading} className="w-full">
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : otpSent ? "Verify code" : "Send code"}
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : otpSent ? (
+                  "Verify code"
+                ) : (
+                  "Send code"
+                )}
               </Button>
             </form>
           )}
 
           <p className="text-center text-sm text-muted-foreground">
-            {mode === "signin" ? "Don't have an account? " : "Already have one? "}
+            {mode === "signin"
+              ? "Don't have an account? "
+              : "Already have one? "}
             <button
               type="button"
-              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+              onClick={() =>
+                setMode(mode === "signin" ? "signup" : "signin")
+              }
               className="text-primary hover:underline font-medium"
             >
               {mode === "signin" ? "Sign up" : "Sign in"}
@@ -180,7 +251,9 @@ export default function Auth() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          <Link to="/" className="hover:text-foreground transition-colors">← Back to home</Link>
+          <Link to="/" className="hover:text-foreground transition-colors">
+            ← Back to home
+          </Link>
         </p>
       </motion.div>
     </div>
