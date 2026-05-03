@@ -13,7 +13,7 @@ export default function Auth() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
-  const [mode, setMode] = useState<"signin" | "signup">("signup"); // signup first
+  const [mode, setMode] = useState<"signin" | "signup">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -137,15 +137,6 @@ export default function Auth() {
                 )}
               </Button>
             </form>
-
-            {/* CONTINUE AS GUEST */}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => navigate("/app")}
-            >
-              Continue as Guest
-            </Button>
 
             {/* SWITCH */}
             <p className="text-center text-sm text-muted-foreground">
