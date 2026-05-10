@@ -89,58 +89,90 @@ export default function PPTGenerator() {
     pptx.layout = "LAYOUT_WIDE"; // 13.33 x 7.5
     pptx.title = title;
 
-    if (tplKey === "wedding") return renderWedding(pptx, title, subtitle, slides);
+    if (tplKey === "wedding") return renderWedding(pptx, title, subtitle, slides, prompt);
     if (tplKey === "resume") return renderResume(pptx, title, subtitle, slides);
     if (tplKey === "school") return renderSchool(pptx, title, subtitle, slides);
     return renderWork(pptx, title, subtitle, slides, tpl);
   };
 
-  // ───────── WEDDING — invitation aesthetic ─────────
-  const renderWedding = async (
-    pptx: pptxgen, title: string, subtitle: string, slides: SlideContent[]
-  ) => {
-    const BG = "FBF6F0", INK = "3D2E2A", GOLD = "B8924A", MUTED = "8A7A6F";
+  // Detect religion/culture cues from user prompt to theme the wedding deck
+  const detectReligion = (text: string) => {
+    const t = text.toLowerCase();
+    if (/(hindu|indian|sangeet|mandap|baraat|saree|sanskrit)/.test(t))
+      return { key: "hindu", bg: "FFF5E6", ink: "5C1A1B", accent: "C8102E", gold: "D4A017", couple: "🕉  •  💑  •  🌺", motto: "शुभ विवाह", couples: "👰🏽‍♀️ 🤵🏽‍♂️" };
+    if (/(christian|church|catholic|cathedral|bible)/.test(t))
+      return { key: "christian", bg: "FFFFFF", ink: "1A1F36", accent: "8B7355", gold: "B8924A", couple: "✝  •  💒  •  🤍", motto: "Holy Matrimony", couples: "👰‍♀️ 🤵‍♂️" };
+    if (/(muslim|islam|nikah|mehndi|arabic)/.test(t))
+      return { key: "muslim", bg: "F4F1E8", ink: "1B3A2E", accent: "0F5132", gold: "C9A227", couple: "☾  •  💚  •  ❀", motto: "نکاح مبارک", couples: "👰🏽 🤵🏽" };
+    if (/(sikh|gurdwara|anand karaj|punjabi)/.test(t))
+      return { key: "sikh", bg: "FFF8E7", ink: "5A2A0C", accent: "FF6B1A", gold: "D4A017", couple: "☬  •  💛  •  ✦", motto: "Anand Karaj", couples: "👰🏽‍♀️ 🤵🏽‍♂️" };
+    if (/(jewish|chuppah|mazel|hebrew)/.test(t))
+      return { key: "jewish", bg: "F6F8FB", ink: "1B2A4E", accent: "1B4F8C", gold: "C9A84C", couple: "✡  •  💙  •  ❀", motto: "Mazel Tov", couples: "👰 🤵" };
+    return { key: "classic", bg: "FBF6F0", ink: "3D2E2A", accent: "B8924A", gold: "B8924A", couple: "♡  •  ⚜  •  ♡", motto: "Together Forever", couples: "👰 🤵" };
+  };
 
+  // ───────── WEDDING — invitation aesthetic, religion-aware ─────────
+  const renderWedding = async (
+    pptx: pptxgen, title: string, subtitle: string, slides: SlideContent[], userPrompt: string
+  ) => {
+    const theme = detectReligion(userPrompt + " " + title + " " + subtitle);
+    const BG = theme.bg, INK = theme.ink, GOLD = theme.gold, ACCENT = theme.accent, MUTED = "8A7A6F";
+
+    // COVER
     const cover = pptx.addSlide();
     cover.background = { color: BG };
-    // ornamental frame
-    cover.addShape("rect", { x: 0.6, y: 0.6, w: 12.13, h: 6.3, fill: { type: "none" } as any, line: { color: GOLD, width: 1 } });
-    cover.addShape("rect", { x: 0.8, y: 0.8, w: 11.73, h: 5.9, fill: { type: "none" } as any, line: { color: GOLD, width: 0.5 } });
-    cover.addText("· together with their families ·", {
-      x: 1, y: 1.6, w: 11.33, h: 0.4, fontSize: 13, italic: true, color: MUTED, fontFace: "Garamond", align: "center", charSpacing: 3,
+    cover.addShape("rect", { x: 0.6, y: 0.6, w: 12.13, h: 6.3, fill: { type: "none" } as any, line: { color: GOLD, width: 1.5 } });
+    cover.addShape("rect", { x: 0.85, y: 0.85, w: 11.63, h: 5.8, fill: { type: "none" } as any, line: { color: GOLD, width: 0.5 } });
+    // top motif
+    cover.addText(theme.couple, {
+      x: 1, y: 1.2, w: 11.33, h: 0.6, fontSize: 22, color: GOLD, align: "center", charSpacing: 6,
     });
+    cover.addText(theme.motto, {
+      x: 1, y: 1.85, w: 11.33, h: 0.45, fontSize: 14, italic: true, color: MUTED, fontFace: "Garamond", align: "center", charSpacing: 4,
+    });
+    // calligraphy title
     cover.addText(title, {
-      x: 1, y: 2.3, w: 11.33, h: 2.0, fontSize: 60, italic: true, color: INK, fontFace: "Monotype Corsiva", align: "center", valign: "middle",
+      x: 1, y: 2.5, w: 11.33, h: 1.8, fontSize: 64, italic: true, bold: true, color: INK,
+      fontFace: "Monotype Corsiva", align: "center", valign: "middle",
     });
-    cover.addShape("line", { x: 5.5, y: 4.45, w: 2.33, h: 0, line: { color: GOLD, width: 1 } });
-    cover.addText(subtitle || "request the honor of your presence", {
-      x: 1, y: 4.6, w: 11.33, h: 0.6, fontSize: 16, color: MUTED, fontFace: "Garamond", align: "center", italic: true,
+    cover.addShape("line", { x: 5.16, y: 4.5, w: 3, h: 0, line: { color: GOLD, width: 1.25 } });
+    // couple emoji as "doll"
+    cover.addText(theme.couples, {
+      x: 1, y: 4.7, w: 11.33, h: 0.9, fontSize: 54, align: "center",
     });
-    cover.addText("♥", { x: 6.16, y: 5.4, w: 1, h: 0.6, fontSize: 22, color: GOLD, align: "center" });
+    cover.addText(subtitle || "request the honour of your presence", {
+      x: 1, y: 5.7, w: 11.33, h: 0.5, fontSize: 16, italic: true, color: MUTED, fontFace: "Garamond", align: "center",
+    });
+    cover.addText("♥", { x: 6.16, y: 6.2, w: 1, h: 0.4, fontSize: 18, color: ACCENT, align: "center" });
 
+    // CONTENT slides
     slides.forEach((s) => {
       const slide = pptx.addSlide();
       slide.background = { color: BG };
-      slide.addShape("rect", { x: 0.6, y: 0.6, w: 12.13, h: 6.3, fill: { type: "none" } as any, line: { color: GOLD, width: 0.75 } });
+      slide.addShape("rect", { x: 0.6, y: 0.6, w: 12.13, h: 6.3, fill: { type: "none" } as any, line: { color: GOLD, width: 1 } });
+      // corner ornaments
+      slide.addText("❦", { x: 0.7, y: 0.65, w: 0.5, h: 0.5, fontSize: 18, color: GOLD });
+      slide.addText("❦", { x: 12.13, y: 0.65, w: 0.5, h: 0.5, fontSize: 18, color: GOLD, align: "right" });
+      slide.addText("❦", { x: 0.7, y: 6.4, w: 0.5, h: 0.5, fontSize: 18, color: GOLD });
+      slide.addText("❦", { x: 12.13, y: 6.4, w: 0.5, h: 0.5, fontSize: 18, color: GOLD, align: "right" });
 
       slide.addText(s.title, {
-        x: 1, y: 1.0, w: 11.33, h: 1.1, fontSize: 40, italic: true, color: INK, fontFace: "Monotype Corsiva", align: "center",
+        x: 1, y: 1.0, w: 11.33, h: 1.2, fontSize: 44, italic: true, color: INK,
+        fontFace: "Monotype Corsiva", align: "center",
       });
-      slide.addShape("line", { x: 6.16, y: 2.15, w: 1, h: 0, line: { color: GOLD, width: 1 } });
+      slide.addShape("line", { x: 6.16, y: 2.25, w: 1, h: 0, line: { color: GOLD, width: 1.25 } });
 
       const items = (s.bullets || []).slice(0, 6).map((b) => ({
         text: b,
-        options: { color: INK, fontSize: 18, fontFace: "Garamond", align: "center" as const, paraSpaceAfter: 12, italic: false },
+        options: { color: INK, fontSize: 18, fontFace: "Garamond", align: "center" as const, paraSpaceAfter: 14 },
       }));
-      slide.addText(items as any, { x: 1.5, y: 2.6, w: 10.33, h: 4.0, valign: "top" });
+      slide.addText(items as any, { x: 1.5, y: 2.7, w: 10.33, h: 3.6, valign: "top" });
+      // small accent at bottom
+      slide.addText(theme.couple, {
+        x: 1, y: 6.45, w: 11.33, h: 0.4, fontSize: 14, color: GOLD, align: "center", charSpacing: 5,
+      });
       if (s.notes) slide.addNotes(s.notes);
     });
-
-    const closing = pptx.addSlide();
-    closing.background = { color: BG };
-    closing.addShape("rect", { x: 0.6, y: 0.6, w: 12.13, h: 6.3, fill: { type: "none" } as any, line: { color: GOLD, width: 1 } });
-    closing.addText("With love,", { x: 1, y: 2.8, w: 11.33, h: 0.6, fontSize: 22, italic: true, color: MUTED, fontFace: "Garamond", align: "center" });
-    closing.addText(title, { x: 1, y: 3.6, w: 11.33, h: 1.5, fontSize: 54, italic: true, color: INK, fontFace: "Monotype Corsiva", align: "center" });
 
     const fname = `${title.replace(/[^a-z0-9]+/gi, "_").slice(0, 40) || "wedding"}.pptx`;
     await pptx.writeFile({ fileName: fname });
