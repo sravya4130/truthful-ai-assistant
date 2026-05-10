@@ -400,7 +400,16 @@ export default function PPTGenerator() {
                 <label className="text-sm font-medium">Number of content slides</label>
                 <span className="text-sm text-primary font-medium">{slideCount}</span>
               </div>
-              <Slider min={3} max={15} step={1} value={[slideCount]} onValueChange={(v) => setSlideCount(v[0])} />
+              <Slider
+                min={1}
+                max={template === "wedding" || template === "resume" ? 4 : 15}
+                step={1}
+                value={[Math.min(slideCount, template === "wedding" || template === "resume" ? 4 : 15)]}
+                onValueChange={(v) => setSlideCount(v[0])}
+              />
+              {(template === "wedding" || template === "resume") && (
+                <p className="text-xs text-muted-foreground mt-1">{template === "wedding" ? "Wedding" : "Resume"} presentations are limited to 1–4 pages.</p>
+              )}
             </div>
             <Button onClick={handleGenerate} disabled={generating || !prompt.trim()} className="w-full glow">
               {generating ? (
