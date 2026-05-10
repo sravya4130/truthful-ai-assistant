@@ -18,7 +18,7 @@ export default function Landing() {
   const blob3Y = useTransform(scrollY, [0, 1500], [0, -400]);
   const titleScale = useTransform(scrollY, [0, 400], [1, 0.85]);
 
-  const ctaTo = user ? "/app" : "/auth";
+  const ctaTo = "/app";
 
   return (
     <div className="min-h-screen overflow-x-hidden" style={{ background: "var(--gradient-surface)" }}>

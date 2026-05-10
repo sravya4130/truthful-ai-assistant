@@ -98,25 +98,76 @@ export default function Index() {
 
   const handleDeleteSession = useCallback(
     async (id: string) => {
-      const { error } = await supabase.from("chat_sessions").delete().eq("id", id);
-      if (error) {
-        toast.error("Delete failed");
-        return;
+      if (user && !id.startsWith("guest-")) {
+        const { error } = await supabase.from("chat_sessions").delete().eq("id", id);
+        if (error) {
+          toast.error("Delete failed");
+          return;
+        }
       }
       setSessions((prev) => prev.filter((s) => s.id !== id));
       if (activeSessionId === id) setActiveSessionId(null);
       toast.success("Chat deleted");
     },
-    [activeSessionId]
+    [activeSessionId, user]
   );
 
   const sendMessage = useCallback(
     async (content: string) => {
+      const mode = activeSession?.mode || currentMode;
+
+      // GUEST MODE: in-memory only, no DB persistence
       if (!user) {
-        toast.error("Please sign up in the sidebar to start chatting");
+        const guestSessionId = activeSessionId || `guest-${Date.now()}`;
+        let workingSession = activeSession;
+        if (!activeSessionId) {
+          workingSession = {
+            id: guestSessionId,
+            title: content.slice(0, 40),
+            mode,
+            createdAt: new Date(),
+            messages: [],
+          };
+          setSessions((prev) => [workingSession!, ...prev]);
+          setActiveSessionId(guestSessionId);
+        }
+        const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content, timestamp: new Date() };
+        const assistantId = `a-${Date.now()}`;
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === guestSessionId
+              ? { ...s, messages: [...s.messages, userMsg, { id: assistantId, role: "assistant", content: "", timestamp: new Date() }] }
+              : s
+          )
+        );
+        scrollToBottom();
+        setIsLoading(true);
+        const history = [
+          ...((workingSession?.messages || []).map((m) => ({ role: m.role, content: m.content }))),
+          { role: "user" as const, content },
+        ];
+        let assistantContent = "";
+        await streamChat({
+          messages: history,
+          mode,
+          onDelta: (chunk) => {
+            assistantContent += chunk;
+            const captured = assistantContent;
+            setSessions((prev) =>
+              prev.map((s) =>
+                s.id !== guestSessionId
+                  ? s
+                  : { ...s, messages: s.messages.map((m) => (m.id === assistantId ? { ...m, content: captured } : m)) }
+              )
+            );
+            scrollToBottom();
+          },
+          onDone: () => { setIsLoading(false); scrollToBottom(); },
+          onError: (err) => { toast.error(err); setIsLoading(false); },
+        });
         return;
       }
-      const mode = activeSession?.mode || currentMode;
+
       let sessionId = activeSessionId;
       let workingSession = activeSession;
 
@@ -218,7 +269,6 @@ export default function Index() {
         onDone: async () => {
           setIsLoading(false);
           scrollToBottom();
-          // Persist final assistant content + bump session updated_at
           if (assistantContent) {
             await supabase.from("chat_messages").update({ content: assistantContent }).eq("id", assistantId);
             await supabase.from("chat_sessions").update({ updated_at: new Date().toISOString() }).eq("id", sessionId);
@@ -227,7 +277,6 @@ export default function Index() {
         onError: async (err) => {
           toast.error(err);
           setIsLoading(false);
-          // Remove empty assistant placeholder
           await supabase.from("chat_messages").delete().eq("id", assistantId);
           setSessions((prev) =>
             prev.map((s) =>
