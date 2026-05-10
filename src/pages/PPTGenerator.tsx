@@ -297,16 +297,18 @@ export default function PPTGenerator() {
   const handleGenerate = async () => {
     const text = prompt.trim();
     if (!text) return;
+    const cap = template === "wedding" || template === "resume" ? 4 : 15;
+    const finalCount = Math.min(slideCount, cap);
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-ppt-content", {
-        body: { prompt: text, template, slideCount },
+        body: { prompt: text, template, slideCount: finalCount },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       const { title, subtitle, slides } = data as { title: string; subtitle: string; slides: SlideContent[] };
       if (!slides?.length) throw new Error("No slides returned");
-      await buildAndDownload(title, subtitle || "", slides, template);
+      await buildAndDownload(title, subtitle || "", slides.slice(0, finalCount), template);
       setLastTitle(title);
       toast.success("Presentation downloaded");
     } catch (err) {
