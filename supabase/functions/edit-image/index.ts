@@ -62,7 +62,10 @@ serve(async (req) => {
           {
             role: "user",
             content: [
-              { type: "text", text: prompt },
+              {
+                type: "text",
+                text: `Edit the provided image precisely according to this instruction. Preserve the original composition, subject identity, lighting and unrelated details unless the instruction requires changing them. Output a single high-quality edited image.\n\nInstruction: ${prompt}`,
+              },
               { type: "image_url", image_url: { url: imageUrl } },
             ],
           },
