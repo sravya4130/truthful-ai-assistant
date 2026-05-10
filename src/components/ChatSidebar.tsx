@@ -1,10 +1,9 @@
-import { Plus, MessageSquare, Sparkles, Image, Video, FileText, Globe, ChevronLeft, Map, LogOut, Trash2 } from "lucide-react";
+import { Plus, MessageSquare, Sparkles, Image, Video, FileText, Globe, ChevronLeft, Map, LogOut, Trash2, LogIn } from "lucide-react";
 import { ChatSession, ChatMode } from "@/types/chat";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { SidebarAuth } from "./SidebarAuth";
 
 interface ChatSidebarProps {
   sessions: ChatSession[];
@@ -159,8 +158,15 @@ export function ChatSidebar({
               </button>
             </div>
           ) : (
-            <div className="border-t border-sidebar-border">
-              <SidebarAuth />
+            <div className="border-t border-sidebar-border p-3 space-y-2">
+              <p className="text-xs text-muted-foreground px-1">Browsing as guest</p>
+              <button
+                onClick={() => navigate("/auth")}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity glow"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign up / Log in
+              </button>
             </div>
           )}
         </motion.aside>
