@@ -49,7 +49,8 @@ serve(async (req) => {
     }
     const templateKey = (template || "work").toLowerCase();
     const guidance = TEMPLATE_GUIDANCE[templateKey] || TEMPLATE_GUIDANCE.work;
-    const count = Math.min(Math.max(parseInt(String(slideCount)) || 8, 3), 15);
+    const hardCap = templateKey === "wedding" || templateKey === "resume" ? 4 : 15;
+    const count = Math.min(Math.max(parseInt(String(slideCount)) || 4, 1), hardCap);
 
     const sys = `You generate slide content for a presentation. Output ONLY valid JSON via the provided tool. No prose. Tone & structure: ${guidance}`;
 
