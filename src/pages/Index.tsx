@@ -98,16 +98,18 @@ export default function Index() {
 
   const handleDeleteSession = useCallback(
     async (id: string) => {
-      const { error } = await supabase.from("chat_sessions").delete().eq("id", id);
-      if (error) {
-        toast.error("Delete failed");
-        return;
+      if (user && !id.startsWith("guest-")) {
+        const { error } = await supabase.from("chat_sessions").delete().eq("id", id);
+        if (error) {
+          toast.error("Delete failed");
+          return;
+        }
       }
       setSessions((prev) => prev.filter((s) => s.id !== id));
       if (activeSessionId === id) setActiveSessionId(null);
       toast.success("Chat deleted");
     },
-    [activeSessionId]
+    [activeSessionId, user]
   );
 
   const sendMessage = useCallback(
