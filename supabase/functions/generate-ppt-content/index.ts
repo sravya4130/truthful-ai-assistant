@@ -8,8 +8,8 @@ const corsHeaders = {
 };
 
 const TEMPLATE_GUIDANCE: Record<string, string> = {
-  wedding: "Romantic, warm tone. Sections might include: cover (couple names + date), love story, venue, ceremony, reception, gallery moments, thank you. Use evocative, heartfelt language.",
-  resume: "Professional CV style. Sections: cover (name + role), summary, experience, skills, education, projects, contact. Bullet points should be impact-focused.",
+  wedding: "This is a WEDDING INVITATION presentation, NOT a generic deck. Maximum 4 slides total. Use elegant, ceremonial, calligraphy-style copy. Detect the religion or culture from the user's prompt (Hindu, Christian, Muslim, Sikh, Jewish, or classic) and weave culturally appropriate vocabulary and blessings throughout. Sections should read like real invitation cards: e.g. 1) Cover (couple names + date), 2) Ceremony details (venue, date, time), 3) Reception / festivities, 4) RSVP & blessings. Bullets should be SHORT, poetic invitation lines — never paragraphs.",
+  resume: "Professional CV. Maximum 4 slides total. Sections: 1) Cover (name + role), 2) Summary & key skills, 3) Experience highlights, 4) Education & contact. Bullet points must be impact-focused and concise.",
   school: "Educational, clear, age-appropriate. Sections: title, introduction, key facts, examples, diagrams (described as bullets), conclusion, sources. Use simple language.",
   work: "Corporate, executive tone. Sections: title, agenda, problem, approach, key insights, data points, recommendations, next steps. Be concise and outcome-focused.",
 };
