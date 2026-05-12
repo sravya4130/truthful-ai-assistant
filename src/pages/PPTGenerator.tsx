@@ -9,6 +9,33 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import pptxgen from "pptxgenjs";
+import muslimInvite from "@/assets/wedding-muslim.jpg";
+import christianInvite from "@/assets/wedding-christian.jpg";
+import hinduInvite from "@/assets/wedding-hindu.jpg";
+
+async function urlToDataUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onloadend = () => resolve(r.result as string);
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+function parseInvitation(text: string) {
+  const names = text.match(/([A-Z][a-zA-Z]+)\s*(?:&|and)\s*([A-Z][a-zA-Z]+)/);
+  const date = text.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
+  const time = text.match(/(\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm))/);
+  const venue = text.match(/(?:venue|at|@)\s*[:\-]?\s*([A-Z][\w\s&,'\-]{3,60})/);
+  return {
+    names: names ? `${names[1]} & ${names[2]}` : null,
+    date: date ? date[1] : null,
+    time: time ? time[1] : null,
+    venue: venue ? venue[1].trim().replace(/[,.]$/, "") : null,
+  };
+}
 
 type TemplateKey = "wedding" | "resume" | "school" | "work";
 
