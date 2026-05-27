@@ -350,7 +350,7 @@ export default function Index() {
           ) : (
             <div className="py-4">
               {activeSession.messages.map((msg) => (
-                <ChatMessageBubble key={msg.id} message={msg} />
+                <ChatMessageBubble key={msg.id} message={msg} onOptionClick={sendMessage} />
               ))}
               {isLoading && activeSession.messages[activeSession.messages.length - 1]?.content === "" && (
                 <div className="max-w-3xl mx-auto px-4 py-4 flex gap-3">

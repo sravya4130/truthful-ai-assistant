@@ -5,10 +5,32 @@ import ReactMarkdown from "react-markdown";
 
 interface ChatMessageProps {
   message: ChatMessageType;
+  onOptionClick?: (text: string) => void;
 }
 
-export function ChatMessageBubble({ message }: ChatMessageProps) {
+// Pull out lines like "[[OPT]] some answer" so we can render them as buttons.
+function extractOptions(content: string): { clean: string; options: string[] } {
+  const options: string[] = [];
+  const clean = content
+    .split("\n")
+    .filter((line) => {
+      const m = line.trim().match(/^\[\[OPT\]\]\s*(.+)$/i);
+      if (m) {
+        options.push(m[1].trim());
+        return false;
+      }
+      return true;
+    })
+    .join("\n")
+    .trimEnd();
+  return { clean, options };
+}
+
+export function ChatMessageBubble({ message, onOptionClick }: ChatMessageProps) {
   const isAssistant = message.role === "assistant";
+  const { clean, options } = isAssistant
+    ? extractOptions(message.content)
+    : { clean: message.content, options: [] };
 
   return (
     <motion.div
@@ -31,11 +53,35 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
         }`}
       >
         {isAssistant ? (
-          <div className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-headings:font-heading">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
-          </div>
+          <>
+            <div className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-headings:font-heading prose-a:text-primary">
+              <ReactMarkdown
+                components={{
+                  a: ({ node, ...props }) => (
+                    <a {...props} target="_blank" rel="noopener noreferrer" />
+                  ),
+                }}
+              >
+                {clean}
+              </ReactMarkdown>
+            </div>
+            {options.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {options.map((opt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => onOptionClick?.(opt)}
+                    disabled={!onOptionClick}
+                    className="px-3 py-1.5 text-sm rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 text-foreground transition-colors disabled:opacity-50"
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         ) : (
-          <div className="bg-secondary rounded-xl px-4 py-3 inline-block">
+          <div className="bg-secondary rounded-xl px-4 py-3 inline-block whitespace-pre-wrap">
             {message.content}
           </div>
         )}
