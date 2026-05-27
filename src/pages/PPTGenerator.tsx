@@ -97,6 +97,36 @@ interface SlideContent {
   notes?: string;
 }
 
+type WizardStep = { key: string; q: string; options: string[]; allowFree?: boolean };
+const WIZARDS: Record<TemplateKey, WizardStep[]> = {
+  wedding: [
+    { key: "religion", q: "Which religion / culture?", options: ["Hindu", "Christian", "Muslim", "Sikh", "Jewish", "Other"], allowFree: true },
+    { key: "names", q: "Bride & Groom names? (e.g. Sarah & Daniel)", options: [], allowFree: true },
+    { key: "date", q: "Wedding date?", options: [], allowFree: true },
+    { key: "time", q: "Ceremony time?", options: ["10:00 AM", "4:00 PM", "6:00 PM", "7:30 PM"], allowFree: true },
+    { key: "venue", q: "Venue?", options: [], allowFree: true },
+    { key: "extra", q: "Anything extra to include? (love story, dress code…)", options: ["Skip"], allowFree: true },
+  ],
+  school: [
+    { key: "subject", q: "Which subject?", options: ["Science", "Maths", "History", "English", "Computer Science", "Social Studies"], allowFree: true },
+    { key: "topic", q: "Exact topic? (e.g. The Water Cycle)", options: [], allowFree: true },
+    { key: "grade", q: "Class / Grade?", options: ["Class 6", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"], allowFree: true },
+    { key: "tone", q: "Tone?", options: ["Simple & clear", "Detailed", "Fun & visual"], allowFree: true },
+  ],
+  work: [
+    { key: "topic", q: "What's the presentation about?", options: [], allowFree: true },
+    { key: "audience", q: "Audience?", options: ["Team", "Leadership", "Clients", "Investors"], allowFree: true },
+    { key: "goal", q: "Main goal?", options: ["Inform", "Persuade", "Update progress", "Pitch idea"], allowFree: true },
+    { key: "tone", q: "Tone?", options: ["Formal", "Confident", "Friendly"], allowFree: true },
+  ],
+  resume: [
+    { key: "role", q: "Role / job title?", options: [], allowFree: true },
+    { key: "years", q: "Years of experience?", options: ["0–1", "2–4", "5–8", "9+"], allowFree: true },
+    { key: "skills", q: "Top skills? (comma separated)", options: [], allowFree: true },
+    { key: "industry", q: "Industry?", options: ["Tech", "Design", "Finance", "Marketing", "Healthcare", "Other"], allowFree: true },
+  ],
+};
+
 export default function PPTGenerator() {
   const { user, loading: authLoading } = useAuth();
   const [template, setTemplate] = useState<TemplateKey>("work");
@@ -104,6 +134,31 @@ export default function PPTGenerator() {
   const [slideCount, setSlideCount] = useState(8);
   const [generating, setGenerating] = useState(false);
   const [lastTitle, setLastTitle] = useState<string | null>(null);
+  const [guided, setGuided] = useState(false);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [freeText, setFreeText] = useState("");
+
+  const wizard = WIZARDS[template];
+  const currentStep = wizard[stepIdx];
+
+  const resetWizard = () => { setStepIdx(0); setAnswers({}); setFreeText(""); };
+
+  const answerStep = (val: string) => {
+    const next = { ...answers, [currentStep.key]: val };
+    setAnswers(next);
+    setFreeText("");
+    if (stepIdx + 1 < wizard.length) {
+      setStepIdx(stepIdx + 1);
+    } else {
+      // Build prompt from answers
+      const parts = wizard.map((s) => `${s.q.replace(/\?$/, "")}: ${next[s.key] || "-"}`);
+      setPrompt(parts.join("\n"));
+      setGuided(false);
+      resetWizard();
+      toast.success("Filled the description from your answers ✨");
+    }
+  };
 
   const buildAndDownload = async (
     title: string,
@@ -479,8 +534,62 @@ export default function PPTGenerator() {
                   : "Q4 strategy presentation for SaaS company. Focus on growth, retention, and product roadmap..."
               }
               rows={5}
-              className="bg-background/60 resize-none mb-4"
+              className="bg-background/60 resize-none mb-3"
             />
+
+            {/* OR — guided questions */}
+            <div className="flex items-center gap-3 my-3">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground font-medium">OR</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            {!guided ? (
+              <Button
+                variant="outline"
+                onClick={() => { setGuided(true); resetWizard(); }}
+                className="w-full mb-4"
+              >
+                ✨ Answer a few quick questions instead
+              </Button>
+            ) : (
+              <div className="bg-background/60 rounded-xl p-4 mb-4 border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Step {stepIdx + 1} of {wizard.length}</span>
+                  <button onClick={() => { setGuided(false); resetWizard(); }} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+                </div>
+                <p className="font-medium text-sm mb-3">{currentStep.q}</p>
+                {currentStep.options.length > 0 && (
+                  <>
+                    <p className="text-xs text-muted-foreground mb-2">If none match, just type your own below.</p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {currentStep.options.map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => answerStep(opt)}
+                          className="px-3 py-1.5 text-sm rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 transition-colors"
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    value={freeText}
+                    onChange={(e) => setFreeText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && freeText.trim()) answerStep(freeText.trim()); }}
+                    placeholder="Type your answer..."
+                    className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                  <Button size="sm" disabled={!freeText.trim()} onClick={() => answerStep(freeText.trim())}>
+                    {stepIdx + 1 === wizard.length ? "Finish" : "Next"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium">Number of content slides</label>
