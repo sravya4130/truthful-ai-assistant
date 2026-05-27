@@ -97,6 +97,36 @@ interface SlideContent {
   notes?: string;
 }
 
+type WizardStep = { key: string; q: string; options: string[]; allowFree?: boolean };
+const WIZARDS: Record<TemplateKey, WizardStep[]> = {
+  wedding: [
+    { key: "religion", q: "Which religion / culture?", options: ["Hindu", "Christian", "Muslim", "Sikh", "Jewish", "Other"], allowFree: true },
+    { key: "names", q: "Bride & Groom names? (e.g. Sarah & Daniel)", options: [], allowFree: true },
+    { key: "date", q: "Wedding date?", options: [], allowFree: true },
+    { key: "time", q: "Ceremony time?", options: ["10:00 AM", "4:00 PM", "6:00 PM", "7:30 PM"], allowFree: true },
+    { key: "venue", q: "Venue?", options: [], allowFree: true },
+    { key: "extra", q: "Anything extra to include? (love story, dress code…)", options: ["Skip"], allowFree: true },
+  ],
+  school: [
+    { key: "subject", q: "Which subject?", options: ["Science", "Maths", "History", "English", "Computer Science", "Social Studies"], allowFree: true },
+    { key: "topic", q: "Exact topic? (e.g. The Water Cycle)", options: [], allowFree: true },
+    { key: "grade", q: "Class / Grade?", options: ["Class 6", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"], allowFree: true },
+    { key: "tone", q: "Tone?", options: ["Simple & clear", "Detailed", "Fun & visual"], allowFree: true },
+  ],
+  work: [
+    { key: "topic", q: "What's the presentation about?", options: [], allowFree: true },
+    { key: "audience", q: "Audience?", options: ["Team", "Leadership", "Clients", "Investors"], allowFree: true },
+    { key: "goal", q: "Main goal?", options: ["Inform", "Persuade", "Update progress", "Pitch idea"], allowFree: true },
+    { key: "tone", q: "Tone?", options: ["Formal", "Confident", "Friendly"], allowFree: true },
+  ],
+  resume: [
+    { key: "role", q: "Role / job title?", options: [], allowFree: true },
+    { key: "years", q: "Years of experience?", options: ["0–1", "2–4", "5–8", "9+"], allowFree: true },
+    { key: "skills", q: "Top skills? (comma separated)", options: [], allowFree: true },
+    { key: "industry", q: "Industry?", options: ["Tech", "Design", "Finance", "Marketing", "Healthcare", "Other"], allowFree: true },
+  ],
+};
+
 export default function PPTGenerator() {
   const { user, loading: authLoading } = useAuth();
   const [template, setTemplate] = useState<TemplateKey>("work");
@@ -104,6 +134,31 @@ export default function PPTGenerator() {
   const [slideCount, setSlideCount] = useState(8);
   const [generating, setGenerating] = useState(false);
   const [lastTitle, setLastTitle] = useState<string | null>(null);
+  const [guided, setGuided] = useState(false);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [freeText, setFreeText] = useState("");
+
+  const wizard = WIZARDS[template];
+  const currentStep = wizard[stepIdx];
+
+  const resetWizard = () => { setStepIdx(0); setAnswers({}); setFreeText(""); };
+
+  const answerStep = (val: string) => {
+    const next = { ...answers, [currentStep.key]: val };
+    setAnswers(next);
+    setFreeText("");
+    if (stepIdx + 1 < wizard.length) {
+      setStepIdx(stepIdx + 1);
+    } else {
+      // Build prompt from answers
+      const parts = wizard.map((s) => `${s.q.replace(/\?$/, "")}: ${next[s.key] || "-"}`);
+      setPrompt(parts.join("\n"));
+      setGuided(false);
+      resetWizard();
+      toast.success("Filled the description from your answers ✨");
+    }
+  };
 
   const buildAndDownload = async (
     title: string,
