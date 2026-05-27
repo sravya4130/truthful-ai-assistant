@@ -534,8 +534,62 @@ export default function PPTGenerator() {
                   : "Q4 strategy presentation for SaaS company. Focus on growth, retention, and product roadmap..."
               }
               rows={5}
-              className="bg-background/60 resize-none mb-4"
+              className="bg-background/60 resize-none mb-3"
             />
+
+            {/* OR — guided questions */}
+            <div className="flex items-center gap-3 my-3">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground font-medium">OR</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            {!guided ? (
+              <Button
+                variant="outline"
+                onClick={() => { setGuided(true); resetWizard(); }}
+                className="w-full mb-4"
+              >
+                ✨ Answer a few quick questions instead
+              </Button>
+            ) : (
+              <div className="bg-background/60 rounded-xl p-4 mb-4 border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Step {stepIdx + 1} of {wizard.length}</span>
+                  <button onClick={() => { setGuided(false); resetWizard(); }} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+                </div>
+                <p className="font-medium text-sm mb-3">{currentStep.q}</p>
+                {currentStep.options.length > 0 && (
+                  <>
+                    <p className="text-xs text-muted-foreground mb-2">If none match, just type your own below.</p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {currentStep.options.map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => answerStep(opt)}
+                          className="px-3 py-1.5 text-sm rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 transition-colors"
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    value={freeText}
+                    onChange={(e) => setFreeText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && freeText.trim()) answerStep(freeText.trim()); }}
+                    placeholder="Type your answer..."
+                    className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                  <Button size="sm" disabled={!freeText.trim()} onClick={() => answerStep(freeText.trim())}>
+                    {stepIdx + 1 === wizard.length ? "Finish" : "Next"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium">Number of content slides</label>
