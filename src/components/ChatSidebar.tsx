@@ -1,4 +1,4 @@
-import { Plus, MessageSquare, Sparkles, Image, Video, FileText, Globe, ChevronLeft, Map, LogOut, Trash2, LogIn } from "lucide-react";
+import { Plus, MessageSquare, Sparkles, Image, Video, FileText, Globe, ChevronLeft, Map, LogOut, Trash2, LogIn, BookOpen } from "lucide-react";
 import { ChatSession, ChatMode } from "@/types/chat";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
@@ -39,6 +39,7 @@ export function ChatSidebar({
   const creationTools = [
     { icon: Image, label: "Image Generator", onClick: () => user ? navigate("/images") : toast.error("Sign up to use this"), enabled: true },
     { icon: FileText, label: "PPT Generator", onClick: () => user ? navigate("/ppt") : toast.error("Sign up to use this"), enabled: true },
+    { icon: BookOpen, label: "Summarizo", onClick: () => navigate("/summarizo"), enabled: true },
     { icon: Video, label: "Video Generator", onClick: () => toast("Coming soon"), enabled: false },
     { icon: Globe, label: "Website Generator", onClick: () => toast("Coming soon"), enabled: false },
   ];
