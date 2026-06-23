@@ -63,18 +63,38 @@ export default function Summarizo() {
   };
 
   const summarize = async () => {
-    if (!text.trim()) { toast.error("Paste some content first"); return; }
+    const content = text.trim();
+    if (!content) { toast.error("Paste some content first"); return; }
+    if (content.length < 30) { toast.error("Content is too short to summarize"); return; }
     setLoading(true);
     setResult("");
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+      const token = session?.access_token || apikey;
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/summarize`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ content: text, mode, age }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          apikey,
+        },
+        body: JSON.stringify({ content: content.slice(0, 60000), mode, age }),
       });
-      if (!resp.ok || !resp.body) { toast.error("Summarization failed"); setLoading(false); return; }
+
+      if (!resp.ok) {
+        let msg = `Request failed (${resp.status})`;
+        try {
+          const j = await resp.json();
+          if (j?.error) msg = typeof j.error === "string" ? j.error : JSON.stringify(j.error);
+        } catch {}
+        if (resp.status === 429) msg = "Too many requests. Please wait a moment and try again.";
+        if (resp.status === 402) msg = "AI credits exhausted. Please add credits to continue.";
+        toast.error(msg);
+        setLoading(false);
+        return;
+      }
+      if (!resp.body) { toast.error("No response from server"); setLoading(false); return; }
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
@@ -84,27 +104,33 @@ export default function Summarizo() {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        let idx: number;
-        while ((idx = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6).trim();
-          if (json === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(json);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) { acc += delta; setResult(acc); }
-          } catch {}
+        // SSE events are separated by blank lines; handle both \n\n and \r\n\r\n
+        const events = buffer.split(/\r?\n\r?\n/);
+        buffer = events.pop() || "";
+        for (const evt of events) {
+          for (const rawLine of evt.split(/\r?\n/)) {
+            const line = rawLine.trim();
+            if (!line.startsWith("data:")) continue;
+            const json = line.slice(5).trim();
+            if (!json || json === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(json);
+              const delta = parsed.choices?.[0]?.delta?.content;
+              if (delta) { acc += delta; setResult(acc); }
+            } catch {
+              /* ignore non-JSON keepalives */
+            }
+          }
         }
       }
+      if (!acc.trim()) toast.error("The model returned an empty response. Try again.");
     } catch (e: any) {
-      toast.error(e.message || "Error");
+      toast.error(e?.message || "Network error");
     } finally {
       setLoading(false);
     }
   };
+
 
   const copy = async () => {
     await navigator.clipboard.writeText(result);

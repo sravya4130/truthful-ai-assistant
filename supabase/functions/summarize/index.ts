@@ -89,14 +89,24 @@ serve(async (req) => {
 
     if (!res.ok) {
       const errText = await res.text();
-      return new Response(JSON.stringify({ error: errText }), {
+      console.error("AI gateway error", res.status, errText);
+      let friendly = errText;
+      if (res.status === 429) friendly = "Rate limit reached. Please try again in a moment.";
+      if (res.status === 402) friendly = "AI credits exhausted. Add credits to continue.";
+      return new Response(JSON.stringify({ error: friendly }), {
         status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     return new Response(res.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
     });
+
   } catch (e) {
     console.error("summarize error:", e);
     return new Response(JSON.stringify({ error: String(e) }), {
