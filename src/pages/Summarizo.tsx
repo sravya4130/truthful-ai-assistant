@@ -69,11 +69,20 @@ export default function Summarizo() {
     setLoading(true);
     setResult("");
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      let accessToken: string | undefined;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        accessToken = session?.access_token;
+      } catch (error) {
+        console.warn("Summarizo auth restore skipped", error);
+      }
       const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-      const token = session?.access_token || apikey;
+      const token = accessToken || apikey;
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 90000);
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/summarize`, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -81,6 +90,7 @@ export default function Summarizo() {
         },
         body: JSON.stringify({ content: content.slice(0, 60000), mode, age }),
       });
+      window.clearTimeout(timeout);
 
       if (!resp.ok) {
         let msg = `Request failed (${resp.status})`;
@@ -125,7 +135,13 @@ export default function Summarizo() {
       }
       if (!acc.trim()) toast.error("The model returned an empty response. Try again.");
     } catch (e: any) {
-      toast.error(e?.message || "Network error");
+      if (e?.name === "AbortError") {
+        toast.error("Summarizo took too long. Try shorter content or try again in a moment.");
+      } else if (e?.message?.includes("Failed to fetch")) {
+        toast.error("Can’t reach Summarizo right now. The backend may be paused or waking up.");
+      } else {
+        toast.error(e?.message || "Network error");
+      }
     } finally {
       setLoading(false);
     }

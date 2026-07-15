@@ -17,17 +17,33 @@ export async function streamChat({
   onDone: () => void;
   onError?: (err: string) => void;
 }) {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  let token = apikey;
 
-  const resp = await fetch(CHAT_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ messages, mode }),
-  });
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    token = session?.access_token || apikey;
+  } catch (error) {
+    console.warn("Chat auth restore skipped", error);
+  }
+
+  let resp: Response;
+  try {
+    resp = await fetch(CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        apikey,
+      },
+      body: JSON.stringify({ messages, mode }),
+    });
+  } catch (error) {
+    console.warn("Chat request failed", error);
+    onError?.("Can’t reach the AI backend right now. Please try again in a moment.");
+    onDone();
+    return;
+  }
 
   if (!resp.ok) {
     const data = await resp.json().catch(() => ({ error: "Request failed" }));

@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey",
+  "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey, x-lovable-aig-run-id",
 };
 
 type Mode = "quick" | "detailed" | "age" | "takeaways" | "simplify";
@@ -72,13 +72,22 @@ serve(async (req) => {
 
     const trimmed = content.slice(0, 60000);
     const key = Deno.env.get("LOVABLE_API_KEY");
+    if (!key) {
+      return new Response(JSON.stringify({ error: "AI service is not configured yet." }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const system = buildPrompt(mode as Mode, age);
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      headers: {
+        "Lovable-API-Key": key,
+        "X-Lovable-AIG-SDK": "direct-fetch",
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: system },
           { role: "user", content: `Here is the content to process:\n\n${trimmed}` },
@@ -109,7 +118,10 @@ serve(async (req) => {
 
   } catch (e) {
     console.error("summarize error:", e);
-    return new Response(JSON.stringify({ error: String(e) }), {
+    const message = e instanceof Error && e.message.includes("fetch")
+      ? "Summarizo could not reach the AI service. Please try again in a moment."
+      : "Summarizo failed. Please try again with shorter content.";
+    return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
