@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey",
+  "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey, x-lovable-aig-run-id",
 };
 
 function detectEmotion(text: string) {
@@ -86,6 +86,12 @@ serve(async (req) => {
   try {
     const { messages, mode = "chat" } = await req.json();
     const key = Deno.env.get("LOVABLE_API_KEY");
+    if (!key) {
+      return new Response(JSON.stringify({ error: "AI service is not configured yet." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const last = messages[messages.length - 1]?.content || "";
     const emotion = detectEmotion(last);
@@ -95,24 +101,42 @@ serve(async (req) => {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${key}`,
+        "Lovable-API-Key": key,
+        "X-Lovable-AIG-SDK": "direct-fetch",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-3-flash-preview",
         messages: [{ role: "system", content: prompt }, ...messages],
         stream: true,
       }),
     });
 
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("AI gateway error", res.status, errText);
+      let friendly = "AI response failed. Please try again.";
+      if (res.status === 429) friendly = "Too many requests. Please wait a moment and try again.";
+      if (res.status === 402) friendly = "AI credits exhausted. Please add credits to continue.";
+      return new Response(JSON.stringify({ error: friendly }), {
+        status: res.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(res.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
     });
   } catch (e) {
     console.error("chat error:", e);
-    return new Response(JSON.stringify({ error: "error" }), {
+    return new Response(JSON.stringify({ error: "Can’t reach the AI backend right now. Please try again in a moment." }), {
       status: 500,
-      headers: corsHeaders,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

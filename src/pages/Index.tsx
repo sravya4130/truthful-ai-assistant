@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 export default function Index() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -29,15 +29,21 @@ export default function Index() {
 
   // Load sessions from DB
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return;
+    if (!user) {
+      setLoadingSessions(false);
+      return;
+    }
+    let cancelled = false;
     (async () => {
       setLoadingSessions(true);
       const { data: sess, error } = await supabase
         .from("chat_sessions")
         .select("*")
         .order("updated_at", { ascending: false });
+      if (cancelled) return;
       if (error) {
-        toast.error("Failed to load chats");
+        toast.error("Couldn’t load saved chats. Your data is still safe — the backend may be waking up.");
         setLoadingSessions(false);
         return;
       }
@@ -51,11 +57,13 @@ export default function Index() {
       setSessions(sessionList);
       setLoadingSessions(false);
     })();
-  }, [user]);
+    return () => { cancelled = true; };
+  }, [user, authLoading]);
 
   // Load messages for active session if not loaded
   useEffect(() => {
     if (!activeSessionId) return;
+    if (!user || activeSessionId.startsWith("guest-")) return;
     const sess = sessions.find((s) => s.id === activeSessionId);
     if (!sess || sess.messages.length > 0) return;
     (async () => {
@@ -65,7 +73,7 @@ export default function Index() {
         .eq("session_id", activeSessionId)
         .order("created_at", { ascending: true });
       if (error) {
-        toast.error("Failed to load messages");
+        toast.error("Couldn’t load this chat right now. Please try again in a moment.");
         return;
       }
       setSessions((prev) =>
@@ -84,7 +92,7 @@ export default function Index() {
         )
       );
     })();
-  }, [activeSessionId, sessions]);
+  }, [activeSessionId, sessions, user]);
 
   const handleSetMode = useCallback((mode: ChatMode) => {
     setCurrentMode(mode);
@@ -181,7 +189,7 @@ export default function Index() {
           .select()
           .single();
         if (error || !created) {
-          toast.error("Failed to create chat");
+          toast.error("Couldn’t save a new chat. The backend may be waking up — try again in a moment.");
           return;
         }
         sessionId = created.id;
@@ -203,7 +211,7 @@ export default function Index() {
         .select()
         .single();
       if (userMsgErr || !userMsgRow) {
-        toast.error("Failed to save message");
+        toast.error("Couldn’t save your message. Please try again in a moment.");
         return;
       }
 
@@ -221,7 +229,7 @@ export default function Index() {
         .select()
         .single();
       if (asstErr || !asstRow) {
-        toast.error("Failed to start response");
+        toast.error("Couldn’t start the response. Please try again in a moment.");
         return;
       }
 
