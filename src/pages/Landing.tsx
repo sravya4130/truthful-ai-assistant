@@ -64,7 +64,7 @@ export default function Landing() {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
-  const ctaTo = "/app";
+  const ctaTo = "/vrai";
 
   return (
     <div className="min-h-screen overflow-x-hidden relative bg-[#03060f]">
