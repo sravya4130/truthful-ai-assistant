@@ -41,7 +41,7 @@ export async function streamChat({
         Authorization: `Bearer ${token}`,
         apikey,
       },
-      body: JSON.stringify({ messages, mode }),
+      body: JSON.stringify({ messages, mode, personality, voice }),
     });
   } catch (error) {
     console.warn("Chat request failed", error);
