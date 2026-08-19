@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { VoiceProfile } from "@/lib/personalities";
 
 /**
  * Speech layer for the VRAI-AI experience.
- * Picks the most natural available female English voice, speaks with calm
- * pacing, and exposes a live 0..1 amplitude that drives the visualization.
+ * Picks the most natural available female English voice for the active
+ * personality, speaks with calm pacing, and exposes a live 0..1 amplitude
+ * that drives the visualization.
  */
 
-const FEMALE_HINTS = [
+const FALLBACK_HINTS = [
   "google uk english female",
   "google us english",
   "samantha",
@@ -22,10 +24,10 @@ const FEMALE_HINTS = [
   "female",
 ];
 
-function pickVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+function pickVoice(voices: SpeechSynthesisVoice[], hints: string[]): SpeechSynthesisVoice | null {
   const en = voices.filter((v) => v.lang?.toLowerCase().startsWith("en"));
   const pool = en.length ? en : voices;
-  for (const hint of FEMALE_HINTS) {
+  for (const hint of [...hints, ...FALLBACK_HINTS]) {
     const found = pool.find((v) => v.name.toLowerCase().includes(hint));
     if (found) return found;
   }
@@ -36,13 +38,13 @@ export function useVraiVoice() {
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
   const [speaking, setSpeaking] = useState(false);
   const amplitude = useRef(0);
-  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
   const rafRef = useRef(0);
 
   useEffect(() => {
     if (!supported) return;
     const load = () => {
-      voiceRef.current = pickVoice(window.speechSynthesis.getVoices());
+      voicesRef.current = window.speechSynthesis.getVoices();
     };
     load();
     window.speechSynthesis.addEventListener("voiceschanged", load);
@@ -76,32 +78,55 @@ export function useVraiVoice() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [speaking]);
 
+  /**
+   * Speak text with an optional personality voice profile.
+   * `onEnd` fires once the whole utterance queue finishes (or errors).
+   */
   const speak = useCallback(
-    (text: string) => {
-      if (!supported) return;
+    (text: string, profile?: VoiceProfile, onEnd?: () => void) => {
+      if (!supported || !text.trim()) {
+        onEnd?.();
+        return;
+      }
+      const hints = profile?.hints ?? [];
+      const voice = pickVoice(voicesRef.current, hints);
       try {
         window.speechSynthesis.cancel();
         // natural pauses: split into clauses spoken back to back
         const parts = text
+          .replace(/```[\s\S]*?```/g, " code block, see the transcript. ")
+          .replace(/[*_#>`]/g, "")
           .split(/(?<=[.!?,])\s+/)
           .map((s) => s.trim())
           .filter(Boolean);
+        if (!parts.length) {
+          onEnd?.();
+          return;
+        }
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          setSpeaking(false);
+          onEnd?.();
+        };
         parts.forEach((part, i) => {
           const u = new SpeechSynthesisUtterance(part);
-          if (voiceRef.current) u.voice = voiceRef.current;
-          u.lang = voiceRef.current?.lang || "en-US";
-          u.rate = 0.94;
-          u.pitch = 1.02;
+          if (voice) u.voice = voice;
+          u.lang = voice?.lang || "en-US";
+          u.rate = profile?.rate ?? 0.94;
+          u.pitch = profile?.pitch ?? 1.02;
           u.volume = 1;
           if (i === 0) u.onstart = () => setSpeaking(true);
           if (i === parts.length - 1) {
-            u.onend = () => setSpeaking(false);
-            u.onerror = () => setSpeaking(false);
+            u.onend = finish;
+            u.onerror = finish;
           }
           window.speechSynthesis.speak(u);
         });
       } catch {
         setSpeaking(false);
+        onEnd?.();
       }
     },
     [supported],
