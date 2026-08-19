@@ -153,7 +153,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, mode = "chat" } = await req.json();
+    const { messages, mode = "chat", personality = "core", voice = false } = await req.json();
     const key = Deno.env.get("LOVABLE_API_KEY");
     if (!key) {
       return new Response(JSON.stringify({ error: "AI service is not configured yet." }), {
@@ -165,7 +165,16 @@ serve(async (req) => {
     const last = messages[messages.length - 1]?.content || "";
     const emotion = detectEmotion(last);
 
-    const prompt = SYSTEM_PROMPT(mode, emotion);
+    // A specialist personality (anything other than CORE) owns the prompt.
+    let prompt =
+      personality && personality !== "core"
+        ? PERSONALITY_PROMPT(personality)
+        : SYSTEM_PROMPT(mode, emotion);
+
+    if (personality !== "code" && personality !== "research" && emotion !== "none") {
+      prompt = SYSTEM_PROMPT(mode, emotion);
+    }
+    if (voice) prompt += `\n${VOICE_RULE}`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -175,11 +184,12 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: personality === "code" ? "google/gemini-3.7-flash" : "google/gemini-3-flash-preview",
         messages: [{ role: "system", content: prompt }, ...messages],
         stream: true,
       }),
     });
+
 
     if (!res.ok) {
       const errText = await res.text();
