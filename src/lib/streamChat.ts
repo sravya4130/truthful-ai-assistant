@@ -7,16 +7,21 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 export async function streamChat({
   messages,
   mode = "chat",
+  personality = "core",
+  voice = false,
   onDelta,
   onDone,
   onError,
 }: {
   messages: Msg[];
   mode?: "chat" | "transform" | "roadmap";
+  personality?: string;
+  voice?: boolean;
   onDelta: (text: string) => void;
   onDone: () => void;
   onError?: (err: string) => void;
 }) {
+
   const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
   let token = apikey;
 
