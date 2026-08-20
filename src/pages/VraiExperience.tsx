@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { ArrowRight, Mic, MicOff, Volume2, VolumeX, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import VraiNexus, { type NexusState } from "@/components/vrai/VraiNexus";
-import { useVraiVoice } from "@/hooks/useVraiVoice";
+import { useVoiceConversation } from "@/hooks/useVoiceConversation";
+import { PERSONALITIES, getPersonality, type PersonalityId } from "@/lib/personalities";
 
 const GREETING = "Hey, hi there. How can I help you?";
 
@@ -48,107 +49,34 @@ function HudPanel({
 }
 
 export default function VraiExperience() {
-  const [state, setState] = useState<NexusState>("idle");
-  const [caption, setCaption] = useState("");
   const [muted, setMuted] = useState(false);
-  const [micOn, setMicOn] = useState(false);
-  const micAmp = useRef(0);
-  const { speak, stop, speaking, amplitude, supported } = useVraiVoice();
+  const [auto, setAuto] = useState(true);
+  const [picked, setPicked] = useState<PersonalityId>("core");
   const greetedRef = useRef(false);
+
+  const conv = useVoiceConversation({ personality: picked, auto, muted });
+  const state = conv.state as NexusState;
+  const active = getPersonality(auto ? conv.activePersonality : picked);
 
   // greet once the scene is alive
   useEffect(() => {
     const t = window.setTimeout(() => {
       if (greetedRef.current) return;
       greetedRef.current = true;
-      setState("thinking");
-      window.setTimeout(() => {
-        setCaption(GREETING);
-        if (!muted && supported) speak(GREETING);
-        setState("speaking");
-        window.setTimeout(() => setState((s) => (s === "speaking" ? "idle" : s)), 3400);
-      }, 1500);
-    }, 1200);
+      conv.say(GREETING, "core");
+    }, 1400);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (speaking) setState("speaking");
-    else setState((s) => (s === "speaking" ? "idle" : s));
-  }, [speaking]);
-
-  // microphone reactivity for the listening state
-  useEffect(() => {
-    if (!micOn) {
-      micAmp.current = 0;
-      return;
-    }
-    let ctx: AudioContext | null = null;
-    let stream: MediaStream | null = null;
-    let raf = 0;
-    let cancelled = false;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (cancelled) return;
-        ctx = new AudioContext();
-        const src = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
-        src.connect(analyser);
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        setState("listening");
-        const loop = () => {
-          analyser.getByteFrequencyData(data);
-          let sum = 0;
-          for (let i = 0; i < data.length; i++) sum += data[i];
-          const level = Math.min(1, sum / data.length / 90);
-          micAmp.current += (level - micAmp.current) * 0.2;
-          raf = requestAnimationFrame(loop);
-        };
-        loop();
-      } catch {
-        setMicOn(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-      stream?.getTracks().forEach((t) => t.stop());
-      ctx?.close();
-      setState((s) => (s === "listening" ? "idle" : s));
-    };
-  }, [micOn]);
-
-  // merged amplitude feed for the visualization
-  const feed = useRef(0);
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      feed.current = Math.max(amplitude.current, micAmp.current);
-      raf = requestAnimationFrame(loop);
-    };
-    loop();
-    return () => cancelAnimationFrame(raf);
-  }, [amplitude]);
-
-  const replay = () => {
-    setCaption(GREETING);
-    if (muted || !supported) {
-      setState("speaking");
-      window.setTimeout(() => setState("idle"), 2600);
-      return;
-    }
-    speak(GREETING);
-  };
+  const caption = conv.partial || conv.caption;
 
   return (
     <main className="relative h-[100dvh] w-full overflow-hidden bg-background">
       <h1 className="sr-only">VRAI-AI — living AI presence</h1>
 
       {/* living energy nexus */}
-      <VraiNexus state={state} amplitudeRef={feed} className="absolute inset-0" />
+      <VraiNexus state={state} amplitudeRef={conv.amplitude} className="absolute inset-0" />
 
       {/* readability veil */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/55 via-transparent to-background/85" />
@@ -182,8 +110,9 @@ export default function VraiExperience() {
         className="right-8 top-24"
         rows={[
           ["Mode", STATUS_LABEL[state]],
+          ["Persona", active.name.replace("VRAI ", "")],
           ["Voice", muted ? "MUTED" : "ONLINE"],
-          ["Mic", micOn ? "OPEN" : "CLOSED"],
+          ["Mic", conv.active ? "OPEN" : "CLOSED"],
         ]}
       />
 
@@ -198,22 +127,66 @@ export default function VraiExperience() {
         </div>
       </div>
 
+      {/* personality rail */}
+      <div className="absolute inset-x-0 top-16 z-10 flex flex-wrap items-center justify-center gap-2 px-6">
+        <button
+          onClick={() => setAuto((a) => !a)}
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] backdrop-blur-md transition ${
+            auto
+              ? "border-primary/60 bg-primary/15 text-primary"
+              : "border-border/60 bg-background/40 text-muted-foreground"
+          }`}
+        >
+          <Sparkles className="h-3 w-3" />
+          Auto
+        </button>
+        {PERSONALITIES.map((p) => {
+          const on = !auto && picked === p.id;
+          const live = auto && conv.activePersonality === p.id;
+          return (
+            <button
+              key={p.id}
+              onClick={() => {
+                setAuto(false);
+                setPicked(p.id);
+              }}
+              className={`rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] backdrop-blur-md transition ${
+                on || live
+                  ? "border-primary/60 bg-primary/15 text-primary"
+                  : "border-border/50 bg-background/40 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {p.name.replace("VRAI ", "")}
+            </button>
+          );
+        })}
+      </div>
+
       {/* centre stage content */}
       <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-5 px-6 pb-10 text-center sm:pb-14">
         <AnimatePresence mode="wait">
           {caption && (
             <motion.p
-              key={caption}
+              key={caption.slice(0, 40)}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.6 }}
-              className="font-heading text-2xl leading-snug text-foreground drop-shadow-[0_0_24px_hsl(var(--primary)/0.45)] sm:text-4xl"
+              transition={{ duration: 0.5 }}
+              className="max-w-2xl font-heading text-xl leading-snug text-foreground drop-shadow-[0_0_24px_hsl(var(--primary)/0.45)] sm:text-3xl"
             >
               {caption}
             </motion.p>
           )}
         </AnimatePresence>
+
+        {conv.error && (
+          <p className="max-w-md text-xs text-destructive">{conv.error}</p>
+        )}
+        {!conv.sttSupported && (
+          <p className="max-w-md font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
+            Voice input needs Chrome or Edge — chat still works
+          </p>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 14 }}
@@ -221,44 +194,45 @@ export default function VraiExperience() {
           transition={{ duration: 0.7, delay: 0.8 }}
           className="flex flex-wrap items-center justify-center gap-3"
         >
+          <Button
+            size="lg"
+            className="glow h-13 px-8 text-base"
+            onClick={() => conv.toggle()}
+            disabled={!conv.sttSupported}
+          >
+            {conv.active ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
+            {conv.active ? "End conversation" : "Talk to VRAI-AI"}
+          </Button>
           <Link to="/app">
-            <Button size="lg" className="glow h-13 px-8 text-base">
+            <Button
+              variant="outline"
+              size="lg"
+              className="h-13 border-primary/30 bg-background/40 px-5 text-base backdrop-blur-md"
+            >
               Continue with Chat
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Link>
           <Button
-            variant="outline"
-            size="lg"
-            className="h-13 border-primary/30 bg-background/40 px-5 text-base backdrop-blur-md"
-            onClick={() => setMicOn((m) => !m)}
-          >
-            {micOn ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
-            {micOn ? "Stop listening" : "Listen"}
-          </Button>
-          <Button
             variant="ghost"
             size="lg"
             className="h-13 px-4 text-muted-foreground"
             onClick={() => {
-              if (speaking) {
-                stop();
+              if (!muted) {
+                conv.stopSpeech();
                 setMuted(true);
-              } else if (muted) {
-                setMuted(false);
-                replay();
               } else {
-                replay();
+                setMuted(false);
               }
             }}
           >
             {muted ? <VolumeX className="mr-2 h-4 w-4" /> : <Volume2 className="mr-2 h-4 w-4" />}
-            {speaking ? "Mute" : "Replay greeting"}
+            {muted ? "Unmute" : "Mute"}
           </Button>
         </motion.div>
 
         <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground/70">
-          VRAI-AI presence · realtime energy field
+          {active.name} · {active.tagline} · transcript saved to your chat
         </p>
       </div>
     </main>
