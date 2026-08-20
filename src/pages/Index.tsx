@@ -8,6 +8,8 @@ import { OnboardingModal } from "@/components/OnboardingModal";
 import { ChatSession, ChatMessage, ChatMode } from "@/types/chat";
 import { streamChat } from "@/lib/streamChat";
 import { supabase } from "@/integrations/supabase/client";
+import { readGuestVoiceTranscript, clearGuestVoiceTranscript } from "@/lib/voiceHistory";
+
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
