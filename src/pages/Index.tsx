@@ -8,6 +8,8 @@ import { OnboardingModal } from "@/components/OnboardingModal";
 import { ChatSession, ChatMessage, ChatMode } from "@/types/chat";
 import { streamChat } from "@/lib/streamChat";
 import { supabase } from "@/integrations/supabase/client";
+import { readGuestVoiceTranscript, clearGuestVoiceTranscript } from "@/lib/voiceHistory";
+
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -93,6 +95,32 @@ export default function Index() {
       );
     })();
   }, [activeSessionId, sessions, user]);
+
+  // Import a guest voice transcript from the VRAI-AI experience (shared history)
+  useEffect(() => {
+    if (authLoading || user) return;
+    const turns = readGuestVoiceTranscript();
+    if (!turns.length) return;
+    clearGuestVoiceTranscript();
+    const id = `guest-voice-${Date.now()}`;
+    setSessions((prev) => [
+      {
+        id,
+        title: "🎙️ Voice session",
+        mode: "chat" as ChatMode,
+        createdAt: new Date(),
+        messages: turns.map((t, i) => ({
+          id: `${id}-${i}`,
+          role: t.role,
+          content: t.content,
+          timestamp: new Date(),
+        })),
+      },
+      ...prev,
+    ]);
+    setActiveSessionId(id);
+  }, [authLoading, user]);
+
 
   const handleSetMode = useCallback((mode: ChatMode) => {
     setCurrentMode(mode);
