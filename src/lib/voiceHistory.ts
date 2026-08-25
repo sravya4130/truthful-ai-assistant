@@ -2,20 +2,52 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Voice transcripts are saved as normal text messages so the voice
- * conversation and the main chat share one history.
- * Signed-in users -> database. Guests -> localStorage handoff that the
- * chat page imports on load.
+ * conversation and the main chat share ONE conversation.
+ * Signed-in users -> database (the same chat_sessions row the chat page opens).
+ * Guests -> localStorage handoff that the chat page imports on load.
  */
 
 export const GUEST_VOICE_KEY = "vrai-voice-transcript";
+/** id of the session voice + chat currently share (signed-in users) */
+export const ACTIVE_SESSION_KEY = "vrai-active-session";
 
 export interface VoiceTurn {
   role: "user" | "assistant";
   content: string;
 }
 
+export function getSharedSessionId(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setSharedSessionId(id: string | null) {
+  try {
+    if (id) localStorage.setItem(ACTIVE_SESSION_KEY, id);
+    else localStorage.removeItem(ACTIVE_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Reuse the shared session when it still exists, otherwise create one.
+ * This is what makes voice → "Continue with Chat" land in the SAME conversation.
+ */
 export async function ensureVoiceSession(userId: string | null | undefined): Promise<string | null> {
   if (!userId) return null;
+  const existing = getSharedSessionId();
+  if (existing) {
+    try {
+      const { data } = await supabase.from("chat_sessions").select("id").eq("id", existing).maybeSingle();
+      if (data?.id) return data.id as string;
+    } catch {
+      /* fall through to create */
+    }
+  }
   try {
     const { data, error } = await supabase
       .from("chat_sessions")
@@ -23,6 +55,7 @@ export async function ensureVoiceSession(userId: string | null | undefined): Pro
       .select()
       .single();
     if (error || !data) return null;
+    setSharedSessionId(data.id as string);
     return data.id as string;
   } catch {
     return null;
