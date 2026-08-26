@@ -101,3 +101,27 @@ export function autoSelectPersonality(text: string): PersonalityId {
   }
   return "core";
 }
+
+/* ------------------------------------------------------------------ */
+/* PERSISTENCE — the chosen personality survives reloads & route moves */
+/* ------------------------------------------------------------------ */
+
+const PERSONALITY_KEY = "vrai-personality";
+
+export function readStoredPersonality(): PersonalityId {
+  try {
+    const raw = localStorage.getItem(PERSONALITY_KEY);
+    if (raw && PERSONALITIES.some((p) => p.id === raw)) return raw as PersonalityId;
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_PERSONALITY;
+}
+
+export function storePersonality(id: PersonalityId) {
+  try {
+    localStorage.setItem(PERSONALITY_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}

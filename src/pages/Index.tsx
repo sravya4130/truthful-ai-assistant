@@ -8,7 +8,8 @@ import { OnboardingModal } from "@/components/OnboardingModal";
 import { ChatSession, ChatMessage, ChatMode } from "@/types/chat";
 import { streamChat } from "@/lib/streamChat";
 import { supabase } from "@/integrations/supabase/client";
-import { readGuestVoiceTranscript, clearGuestVoiceTranscript } from "@/lib/voiceHistory";
+import { readGuestVoiceTranscript, clearGuestVoiceTranscript, getSharedSessionId } from "@/lib/voiceHistory";
+import { PERSONALITIES, autoSelectPersonality, type PersonalityId } from "@/lib/personalities";
 
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -21,6 +22,8 @@ export default function Index() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentMode, setCurrentMode] = useState<ChatMode>("chat");
   const [loadingSessions, setLoadingSessions] = useState(true);
+  /** "auto" = pick the best VRAI personality per message; otherwise a locked personality */
+  const [personality, setPersonality] = useState<PersonalityId | "auto">("auto");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -58,6 +61,9 @@ export default function Index() {
       }));
       setSessions(sessionList);
       setLoadingSessions(false);
+      // Continue with Chat: open the session the voice mode was using
+      const shared = getSharedSessionId();
+      if (shared && sessionList.some((s) => s.id === shared)) setActiveSessionId(shared);
     })();
     return () => { cancelled = true; };
   }, [user, authLoading]);
@@ -183,9 +189,11 @@ export default function Index() {
           { role: "user" as const, content },
         ];
         let assistantContent = "";
+        const chosen = personality === "auto" ? autoSelectPersonality(content) : personality;
         await streamChat({
           messages: history,
           mode,
+          personality: chosen,
           onDelta: (chunk) => {
             assistantContent += chunk;
             const captured = assistantContent;
@@ -287,9 +295,11 @@ export default function Index() {
       ];
 
       let assistantContent = "";
+      const chosenPersonality = personality === "auto" ? autoSelectPersonality(content) : personality;
       await streamChat({
         messages: history,
         mode,
+        personality: chosenPersonality,
         onDelta: (chunk) => {
           assistantContent += chunk;
           const captured = assistantContent;
@@ -322,7 +332,7 @@ export default function Index() {
         },
       });
     },
-    [activeSessionId, activeSession, currentMode, user, scrollToBottom]
+    [activeSessionId, activeSession, currentMode, user, scrollToBottom, personality]
   );
 
   const handleSelectSession = useCallback(
@@ -366,7 +376,7 @@ export default function Index() {
               <Menu className="w-5 h-5 text-muted-foreground" />
             </button>
           )}
-          <span className="text-sm text-muted-foreground font-medium truncate">
+          <span className="text-sm text-muted-foreground font-medium truncate flex-1">
             {activeSession?.title ||
               (displayMode === "transform"
                 ? "Transform Me"
@@ -374,6 +384,19 @@ export default function Index() {
                 ? "Roadmap Generator"
                 : "New conversation")}
           </span>
+          <select
+            aria-label="VRAI-AI personality"
+            value={personality}
+            onChange={(e) => setPersonality(e.target.value as PersonalityId | "auto")}
+            className="ml-3 shrink-0 text-xs bg-secondary border border-border rounded-md px-2 py-1 text-foreground"
+          >
+            <option value="auto">Auto</option>
+            {PERSONALITIES.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
         </header>
 
         <div className="flex-1 overflow-y-auto">
