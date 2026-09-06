@@ -6,7 +6,15 @@ import ReactMarkdown from "react-markdown";
 interface ChatMessageProps {
   message: ChatMessageType;
   onOptionClick?: (text: string) => void;
+  route?: {
+    category: string;
+    modelName: string;
+    confidence: number;
+    compute: number;
+    fallback: boolean;
+  } | null;
 }
+
 
 // Pull out lines like "[[OPT]] some answer" so we can render them as buttons.
 function extractOptions(content: string): { clean: string; options: string[] } {
