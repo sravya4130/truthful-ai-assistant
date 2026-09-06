@@ -1,9 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { loadRegistry, resolveModels } from "../_shared/registry.ts";
+import { classify } from "../_shared/router.ts";
+import { logRouting, logUsage, userIdFromAuth } from "../_shared/telemetry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey, x-lovable-aig-run-id",
+  "Access-Control-Expose-Headers": "x-vrai-category, x-vrai-model-key, x-vrai-model-name, x-vrai-confidence, x-vrai-reason, x-vrai-compute, x-vrai-fallback",
 };
+
 
 function detectEmotion(text: string) {
   const t = text.toLowerCase();
