@@ -2,6 +2,16 @@ import { supabase } from "@/integrations/supabase/client";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
+export interface RouteInfo {
+  category: string;
+  modelKey: string;
+  modelName: string;
+  confidence: number;
+  reason: string;
+  compute: number;
+  fallback: boolean;
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 export async function streamChat({
@@ -9,17 +19,21 @@ export async function streamChat({
   mode = "chat",
   personality = "core",
   voice = false,
+  sessionId,
   onDelta,
   onDone,
   onError,
+  onRoute,
 }: {
   messages: Msg[];
   mode?: "chat" | "transform" | "roadmap";
   personality?: string;
   voice?: boolean;
+  sessionId?: string | null;
   onDelta: (text: string) => void;
   onDone: () => void;
   onError?: (err: string) => void;
+  onRoute?: (route: RouteInfo) => void;
 }) {
 
   const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -41,7 +55,13 @@ export async function streamChat({
         Authorization: `Bearer ${token}`,
         apikey,
       },
-      body: JSON.stringify({ messages, mode, personality, voice }),
+      body: JSON.stringify({
+        messages,
+        mode,
+        personality,
+        voice,
+        sessionId: sessionId && !sessionId.startsWith("guest-") ? sessionId : null,
+      }),
     });
   } catch (error) {
     console.warn("Chat request failed", error);
@@ -56,6 +76,22 @@ export async function streamChat({
     onDone();
     return;
   }
+
+  const category = resp.headers.get("x-vrai-category");
+  if (category && onRoute) {
+    let reason = resp.headers.get("x-vrai-reason") || "";
+    try { reason = decodeURIComponent(reason); } catch { /* keep raw */ }
+    onRoute({
+      category,
+      modelKey: resp.headers.get("x-vrai-model-key") || "",
+      modelName: resp.headers.get("x-vrai-model-name") || "",
+      confidence: Number(resp.headers.get("x-vrai-confidence") || 0),
+      reason,
+      compute: Number(resp.headers.get("x-vrai-compute") || 0),
+      fallback: resp.headers.get("x-vrai-fallback") === "true",
+    });
+  }
+
 
   if (!resp.body) {
     onError?.("No response body");
