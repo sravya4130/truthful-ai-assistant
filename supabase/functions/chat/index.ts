@@ -1,9 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { loadRegistry, resolveModels } from "../_shared/registry.ts";
+import { classify } from "../_shared/router.ts";
+import { logRouting, logUsage, userIdFromAuth } from "../_shared/telemetry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey, x-lovable-aig-run-id",
+  "Access-Control-Expose-Headers": "x-vrai-category, x-vrai-model-key, x-vrai-model-name, x-vrai-confidence, x-vrai-reason, x-vrai-compute, x-vrai-fallback",
 };
+
 
 function detectEmotion(text: string) {
   const t = text.toLowerCase();
@@ -153,7 +158,8 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, mode = "chat", personality = "core", voice = false } = await req.json();
+    const body = await req.json();
+    const { messages, mode = "chat", personality = "core", voice = false, sessionId = null } = body;
     const key = Deno.env.get("LOVABLE_API_KEY");
     if (!key) {
       return new Response(JSON.stringify({ error: "AI service is not configured yet." }), {
@@ -176,32 +182,113 @@ serve(async (req) => {
     }
     if (voice) prompt += `\n${VOICE_RULE}`;
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Lovable-API-Key": key,
-        "X-Lovable-AIG-SDK": "direct-fetch",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: personality === "code" ? "google/gemini-3.7-flash" : "google/gemini-3-flash-preview",
-        messages: [{ role: "system", content: prompt }, ...messages],
-        stream: true,
-      }),
+    /* ---------- efficiency layer: registry + router ---------- */
+    const registry = await loadRegistry();
+    const light = registry.find((m) => m.key === "LIGHT_MODEL");
+    const decision = await classify({
+      text: last,
+      mode,
+      personality: personality === "core" ? undefined : personality,
+      lightModelId: light?.model_id ?? "google/gemini-3.1-flash-lite",
+      apiKey: key,
     });
+    const { chain } = resolveModels(registry, decision.category);
 
+    // Context trimming: heavy history is the main avoidable cost.
+    const limit = decision.category === "coding" || decision.category === "reasoning" ? 16 : 10;
+    const trimmed = messages.slice(-limit);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("AI gateway error", res.status, errText);
+    const userId = await userIdFromAuth(req);
+    const started = Date.now();
+
+    let res: Response | null = null;
+    let used = chain[0];
+    let fallbackFrom: string | null = null;
+    let lastStatus = 500;
+    let lastErrText = "";
+
+    for (const candidate of chain) {
+      const attempt = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Lovable-API-Key": key,
+          "X-Lovable-AIG-SDK": "direct-fetch",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: candidate.model_id,
+          messages: [{ role: "system", content: prompt }, ...trimmed],
+          stream: true,
+        }),
+      });
+
+      if (attempt.ok) {
+        res = attempt;
+        used = candidate;
+        break;
+      }
+
+      lastStatus = attempt.status;
+      lastErrText = await attempt.text();
+      console.error("AI gateway error", candidate.model_id, attempt.status, lastErrText);
+      // Terminal statuses are not worth retrying on another slot.
+      if (attempt.status === 402 || attempt.status === 401 || attempt.status === 403) break;
+      fallbackFrom = fallbackFrom ?? candidate.key;
+    }
+
+    const latency = Date.now() - started;
+
+    if (!res) {
       let friendly = "AI response failed. Please try again.";
-      if (res.status === 429) friendly = "Too many requests. Please wait a moment and try again.";
-      if (res.status === 402) friendly = "AI credits exhausted. Please add credits to continue.";
+      if (lastStatus === 429) friendly = "Too many requests. Please wait a moment and try again.";
+      if (lastStatus === 402) friendly = "AI credits exhausted. Please add credits to continue.";
+      await logRouting({
+        user_id: userId,
+        session_id: sessionId,
+        category: decision.category,
+        router_confidence: decision.confidence,
+        router_reason: `${decision.method}: ${decision.reason}`,
+        model_key: chain[0].key,
+        model_id: chain[0].model_id,
+        fallback_used: !!fallbackFrom,
+        fallback_from: fallbackFrom,
+        latency_ms: latency,
+        prompt_chars: last.length,
+        context_messages: trimmed.length,
+        estimated_compute: 0,
+        error: `${lastStatus}: ${lastErrText.slice(0, 300)}`,
+      });
       return new Response(JSON.stringify({ error: friendly }), {
-        status: res.status,
+        status: lastStatus,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const logId = await logRouting({
+      user_id: userId,
+      session_id: sessionId,
+      category: decision.category,
+      router_confidence: decision.confidence,
+      router_reason: `${decision.method}: ${decision.reason}`,
+      model_key: used.key,
+      model_id: used.model_id,
+      fallback_used: used.key !== chain[0].key,
+      fallback_from: used.key !== chain[0].key ? chain[0].key : null,
+      latency_ms: latency,
+      prompt_chars: last.length,
+      context_messages: trimmed.length,
+      estimated_compute: used.estimated_compute_cost,
+    });
+
+    await logUsage({
+      user_id: userId,
+      routing_log_id: logId,
+      model_key: used.key,
+      category: decision.category,
+      prompt_tokens: Math.round(trimmed.reduce((n: number, m: { content?: string }) => n + (m.content?.length ?? 0), 0) / 4),
+      latency_ms: latency,
+      estimated_compute: used.estimated_compute_cost,
+    });
 
     return new Response(res.body, {
       headers: {
@@ -209,8 +296,16 @@ serve(async (req) => {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
+        "x-vrai-category": decision.category,
+        "x-vrai-model-key": used.key,
+        "x-vrai-model-name": used.name,
+        "x-vrai-confidence": String(decision.confidence),
+        "x-vrai-reason": encodeURIComponent(decision.reason).slice(0, 300),
+        "x-vrai-compute": String(used.estimated_compute_cost),
+        "x-vrai-fallback": String(used.key !== chain[0].key),
       },
     });
+
   } catch (e) {
     console.error("chat error:", e);
     return new Response(JSON.stringify({ error: "Can’t reach the AI backend right now. Please try again in a moment." }), {
