@@ -6,7 +6,7 @@ import { ChatInput } from "@/components/ChatInput";
 import { EmptyChat } from "@/components/EmptyChat";
 import { OnboardingModal } from "@/components/OnboardingModal";
 import { ChatSession, ChatMessage, ChatMode } from "@/types/chat";
-import { streamChat } from "@/lib/streamChat";
+import { streamChat, type RouteInfo } from "@/lib/streamChat";
 import { supabase } from "@/integrations/supabase/client";
 import { readGuestVoiceTranscript, clearGuestVoiceTranscript, getSharedSessionId } from "@/lib/voiceHistory";
 import { PERSONALITIES, autoSelectPersonality, type PersonalityId } from "@/lib/personalities";
@@ -24,6 +24,8 @@ export default function Index() {
   const [loadingSessions, setLoadingSessions] = useState(true);
   /** "auto" = pick the best VRAI personality per message; otherwise a locked personality */
   const [personality, setPersonality] = useState<PersonalityId | "auto">("auto");
+  /** routing decision per assistant message id (efficiency transparency) */
+  const [routes, setRoutes] = useState<Record<string, RouteInfo>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -194,6 +196,8 @@ export default function Index() {
           messages: history,
           mode,
           personality: chosen,
+          sessionId: guestSessionId,
+          onRoute: (r) => setRoutes((prev) => ({ ...prev, [assistantId]: r })),
           onDelta: (chunk) => {
             assistantContent += chunk;
             const captured = assistantContent;
@@ -300,6 +304,8 @@ export default function Index() {
         messages: history,
         mode,
         personality: chosenPersonality,
+        sessionId,
+        onRoute: (r) => setRoutes((prev) => ({ ...prev, [assistantId]: r })),
         onDelta: (chunk) => {
           assistantContent += chunk;
           const captured = assistantContent;
@@ -409,7 +415,7 @@ export default function Index() {
           ) : (
             <div className="py-4">
               {activeSession.messages.map((msg) => (
-                <ChatMessageBubble key={msg.id} message={msg} onOptionClick={sendMessage} />
+                <ChatMessageBubble key={msg.id} message={msg} onOptionClick={sendMessage} route={routes[msg.id] ?? null} />
               ))}
               {isLoading && activeSession.messages[activeSession.messages.length - 1]?.content === "" && (
                 <div className="max-w-3xl mx-auto px-4 py-4 flex gap-3">
