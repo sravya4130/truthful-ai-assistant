@@ -67,8 +67,8 @@ function HudPanel({
 export default function VraiExperience() {
   const stored = readStoredPersonality();
   const [muted, setMuted] = useState(false);
-  const [auto, setAuto] = useState(stored.auto);
-  const [picked, setPicked] = useState<PersonalityId>(stored.id);
+  const [auto, setAuto] = useState(false);
+  const [picked, setPicked] = useState<PersonalityId>(stored);
 
   const conv = useVoiceConversation({ personality: picked, auto, muted });
   const state = conv.state;
@@ -76,8 +76,8 @@ export default function VraiExperience() {
 
   // keep the selection in sync with the text chat (same personality everywhere)
   useEffect(() => {
-    storePersonality(picked, auto);
-  }, [picked, auto]);
+    storePersonality(picked);
+  }, [picked]);
 
   const caption = conv.partial || conv.caption;
 
